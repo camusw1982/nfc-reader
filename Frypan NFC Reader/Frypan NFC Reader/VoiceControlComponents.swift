@@ -78,6 +78,8 @@ struct TalkButtonView: View {
         
         if !speechRecognizer.isRecognizing {
             print("🎤 開始語音識別")
+            // 清空之前的識別文本
+            speechRecognizer.recognizedText = ""
             onStartRecording()
             DispatchQueue.main.async {
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -117,21 +119,21 @@ struct TalkButtonView: View {
                 onCancelRecording()
                 // 取消操作後重置狀態
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    voiceManager.resetRecordingState()
+                    voiceManager.resetRecordingState(speechRecognizer: speechRecognizer)
                 }
             case .confirm:
                 print("✅ 手指離開確認區域，確認錄音")
                 onConfirmRecording()
                 // 確認操作後重置狀態
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    voiceManager.resetRecordingState()
+                    voiceManager.resetRecordingState(speechRecognizer: speechRecognizer)
                 }
             case .none:
                 print("⚠️ 手指離開中性區域，視為取消")
                 onStopRecording()
                 // 延遲重置所有狀態
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    voiceManager.resetRecordingState()
+                    voiceManager.resetRecordingState(speechRecognizer: speechRecognizer)
                 }
             }
         } else {
@@ -139,7 +141,7 @@ struct TalkButtonView: View {
             onStopRecording()
             // 延遲重置所有狀態
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                voiceManager.resetRecordingState()
+                voiceManager.resetRecordingState(speechRecognizer: speechRecognizer)
             }
         }
         
@@ -158,11 +160,11 @@ struct SlideControlsView: View {
     
     var body: some View {
         if voiceManager.showSlideControls {
-            HStack(spacing: 40) {
+            HStack(spacing: 80) {
                 // 取消按鈕
                 Circle()
                     .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(0.8) : Color.red.opacity(0.3))
-                    .frame(width: 60, height: 60)
+                    .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "xmark")
                             .font(.system(size: 24, weight: .bold))
@@ -174,14 +176,14 @@ struct SlideControlsView: View {
                 // 確認按鈕
                 Circle()
                     .fill(voiceManager.slideOffset > 50 ? Color.green.opacity(0.8) : Color.green.opacity(0.3))
-                    .frame(width: 60, height: 60)
+                    .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "checkmark")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
                             .scaleEffect(voiceManager.slideOffset > 50 ? 1.2 : 1.0)
                     )
-                    .animation(.easeInOut(duration: 0.2), value: voiceManager.slideOffset)
+                    .animation(.easeInOut(duration: 0.3), value: voiceManager.slideOffset)
             }
             .padding(.horizontal, 20)
             .transition(.asymmetric(

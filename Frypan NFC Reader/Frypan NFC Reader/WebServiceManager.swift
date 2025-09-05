@@ -61,7 +61,7 @@ class WebServiceManager: ObservableObject {
         print("📤 通過 WebSocket 發送語音識別結果到 Gemini 語音合成")
         
         // 直接發送 gemini_to_speech 請求
-        webSocketManager.sendSpeechResult(text: text)
+        webSocketManager.sendTextToSpeech(text: text)
         
         // WebSocket 是異步的，我們假設發送成功
         // 實際應用中可以通過 WebSocket 確認機制來確保發送成功
