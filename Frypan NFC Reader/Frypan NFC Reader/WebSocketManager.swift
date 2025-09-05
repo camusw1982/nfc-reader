@@ -81,7 +81,6 @@ class WebSocketManager: NSObject, ObservableObject {
         }
         
         print("🔌 連接到 WebSocket: \(serverURL)")
-        updateConnectionStatus("連接中...")
         
         // 清理舊的連接
         webSocketTask?.cancel()
@@ -90,8 +89,10 @@ class WebSocketManager: NSObject, ObservableObject {
         webSocketTask = URLSession.shared.webSocketTask(with: serverURL)
         webSocketTask?.resume()
         
-        // 先設置為連接中，但唔要立即設置為已連接
-        // 等到收到服務器確認後先至設置為真正連接
+        // 立即設置為已連接狀態，因為 WebSocket 連接已經建立
+        isConnected = true
+        updateConnectionStatus("已連接")
+        
         receiveMessage()
     }
     
@@ -329,6 +330,12 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
+        // 防止重複播放：如果已經開始播放，不再處理新的 chunk
+        if hasStartedPlayback || isPlayingAudio {
+            print("⏭️ 音頻已經在播放中，忽略新 chunk \(chunkIndex)")
+            return
+        }
+        
         // 將所有 chunk 添加到緩衝區，按順序播放
         audioChunks.append(audioData)
         
@@ -365,38 +372,49 @@ class WebSocketManager: NSObject, ObservableObject {
         }
         
         print("📦 收到 MiniMax 音頻 chunk: \(audioData.count) bytes, status: \(status)")
+        print("🔍 [DEBUG] MiniMax 處理前狀態 - isPlayingAudio: \(isPlayingAudio), hasStartedPlayback: \(hasStartedPlayback)")
         
-        // 將音頻數據添加到緩衝區
-        audioChunks.append(audioData)
-        
-        // 更新進度（基於狀態）
+        // MiniMax 的每個 chunk 都包含完整的音頻數據（累積的）
+        // 我們只需要保存最新的完整音頻數據，而不是累積多個 chunk
         if status == 1 {
-            // 進行中，估算進度
-            audioProgress = min(Double(audioChunks.count) / 10.0, 0.9)
+            // 進行中，保存當前的完整音頻數據，但不播放
+            audioChunks = [audioData]  // 替換而不是追加
+            audioProgress = 0.8  // 進行中狀態
+            print("📊 MiniMax 音頻進行中，更新完整音頻數據: \(audioData.count) bytes")
         } else if status == 2 {
-            // 完成
+            // 完成，保存最終的完整音頻數據
+            audioChunks = [audioData]  // 替換而不是追加
             audioProgress = 1.0
-            expectedChunks = audioChunks.count
-        }
-        
-        // 調試信息
-        print("📊 緩衝區狀態: \(audioChunks.count) chunks, 總大小: \(audioChunks.reduce(0) { $0 + $1.count }) bytes")
-        
-        // 檢查是否應該開始播放
-        if status == 1 {
-            // 進行中，檢查是否應該開始播放
-            checkAndStartPlayback()
-        } else if status == 2 {
-            // 完成，立即播放所有緩衝的內容
-            print("🎯 MiniMax 音頻串流完成，播放所有內容...")
-            playAudio()
+            expectedChunks = 1  // 只有一個完整的音頻文件
+            print("🎯 MiniMax 音頻串流完成，最終音頻數據: \(audioData.count) bytes")
+            
+            // 檢查是否已經開始播放，避免重複播放
+            if !hasStartedPlayback && !isPlayingAudio {
+                print("🎵 開始播放最終音頻")
+                playAudio()
+            } else {
+                print("⏭️ 音頻已經在播放中，跳過重複播放")
+                print("🔍 [DEBUG] 跳過播放的原因 - isPlayingAudio: \(isPlayingAudio), hasStartedPlayback: \(hasStartedPlayback)")
+            }
         }
     }
     
     private func checkAndStartPlayback() {
+        // 對於 MiniMax 格式（expectedChunks == 1），不使用自動播放邏輯
+        if expectedChunks == 1 {
+            print("🎵 MiniMax 格式，跳過自動播放檢查")
+            return
+        }
+        
         // 如果正在播放音頻，不要開始新的播放
         if isPlayingAudio {
             print("🎵 音頻正在播放中，等待完成...")
+            return
+        }
+        
+        // 如果已經開始播放，不要重複播放
+        if hasStartedPlayback {
+            print("🎵 音頻已經開始播放，跳過重複播放...")
             return
         }
         
@@ -413,7 +431,7 @@ class WebSocketManager: NSObject, ObservableObject {
         }
         
         // 如果唔知道總數，只在第一次收到足夠 chunk 時設置計時器
-        if expectedChunks <= 0 && playbackTimer == nil && !hasStartedPlayback {
+        if expectedChunks <= 0 && playbackTimer == nil && !hasStartedPlayback && !isPlayingAudio {
             // 如果收到至少 3 個 chunk，設置 0.5 秒後播放（更快的響應）
             if audioChunks.count >= 3 {
                 print("⏰ 設置 0.5 秒後播放計時器...")
@@ -436,6 +454,11 @@ class WebSocketManager: NSObject, ObservableObject {
             print("⏳ 冇音頻 chunk 可播放")
             return
         }
+        
+        // 添加調試日誌來追蹤播放觸發來源
+        print("🔍 [DEBUG] playAudio() 被調用")
+        print("🔍 [DEBUG] 播放狀態 - isPlayingAudio: \(isPlayingAudio), hasStartedPlayback: \(hasStartedPlayback)")
+        print("🔍 [DEBUG] 音頻 chunks: \(audioChunks.count), expectedChunks: \(expectedChunks)")
         
         // 清除播放計時器
         playbackTimer?.invalidate()
@@ -528,6 +551,7 @@ class WebSocketManager: NSObject, ObservableObject {
     
     func resetAudioState() {
         print("🔄 重置音頻狀態")
+        print("🔍 [DEBUG] resetAudioState() 被調用")
         stopAudio()
         geminiResponse = ""
         lastError = nil
@@ -748,8 +772,13 @@ class WebSocketManager: NSObject, ObservableObject {
                             print("📝 原始文本: \(originalText)")
                         }
                         
-                        // 重置音頻狀態準備接收新嘅音頻
-                        self.resetAudioState()
+                        // 只有在沒有播放音頻時才重置狀態
+                        if !self.isPlayingAudio && !self.hasStartedPlayback {
+                            print("🔄 重置音頻狀態準備接收新嘅音頻")
+                            self.resetAudioState()
+                        } else {
+                            print("⏭️ 音頻正在播放中，跳過重置狀態")
+                        }
                         
                     case "audio_chunk":
                         // 音頻 chunk（靜默處理）
@@ -859,8 +888,14 @@ extension WebSocketManager: AVAudioPlayerDelegate {
             self.audioPlayer = nil  // 重置音頻播放器
             print("🎵 音頻播放完成，播放器已重置")
             
-            // 檢查是否有新的 chunk 需要播放
-            if !self.audioChunks.isEmpty {
+            // 對於 MiniMax 音頻（expectedChunks == 1），不檢查新 chunk，直接重置狀態
+            if self.expectedChunks == 1 {
+                print("✅ MiniMax 音頻播放完成，重置狀態")
+                self.expectedChunks = 0
+                self.hasStartedPlayback = false
+                self.audioChunks.removeAll()
+            } else if !self.audioChunks.isEmpty && self.expectedChunks <= 0 {
+                // 只有在不知道總 chunk 數量的情況下才檢查新 chunk
                 print("🔄 檢測到新 chunk，開始播放...")
                 self.playAudio()
             } else {
@@ -868,6 +903,7 @@ extension WebSocketManager: AVAudioPlayerDelegate {
                 // 重置狀態為下一次音頻流做準備
                 self.expectedChunks = 0
                 self.hasStartedPlayback = false
+                self.audioChunks.removeAll()
             }
         }
     }

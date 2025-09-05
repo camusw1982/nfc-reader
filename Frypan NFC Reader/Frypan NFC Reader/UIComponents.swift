@@ -30,7 +30,7 @@ struct HeaderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
-        .padding(.bottom, 16)
+        .padding(.bottom, 100)
     }
 }
 
@@ -41,16 +41,40 @@ struct ConnectionStatusView: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(webSocketManager?.isConnected == true ? Color.green : Color.red)
+                .fill(connectionStatusColor)
                 .frame(width: 8, height: 8)
-            Text(webSocketManager?.connectionStatus ?? "未連接")
+            Text(connectionStatusText)
                 .font(.caption)
-                .foregroundColor(webSocketManager?.isConnected == true ? Color.green : Color.red)
+                .foregroundColor(connectionStatusColor)
             if let connectionId = webSocketManager?.connectionId, !connectionId.isEmpty {
                 Text("(\(connectionId))")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.6))
             }
+        }
+    }
+    
+    private var connectionStatusColor: Color {
+        guard let webSocketManager = webSocketManager else { return .red }
+        
+        // 優先檢查 isConnected 狀態
+        if webSocketManager.isConnected {
+            return .green
+        } else if webSocketManager.connectionStatus.contains("連接中") || 
+                  webSocketManager.connectionStatus.contains("重新連接") {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+    
+    private var connectionStatusText: String {
+        guard let webSocketManager = webSocketManager else { return "未連接" }
+        
+        if webSocketManager.isConnected {
+            return "已連接"
+        } else {
+            return webSocketManager.connectionStatus
         }
     }
 }

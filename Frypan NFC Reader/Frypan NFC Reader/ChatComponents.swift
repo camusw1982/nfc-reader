@@ -9,13 +9,14 @@ import SwiftUI
 
 // MARK: - Chat Message Model
 struct ChatMessage: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     let text: String
     let isUser: Bool
     let timestamp: Date
     let isError: Bool
     
     init(text: String, isUser: Bool, timestamp: Date = Date(), isError: Bool = false) {
+        self.id = UUID()
         self.text = text
         self.isUser = isUser
         self.timestamp = timestamp

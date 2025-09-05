@@ -102,7 +102,7 @@ struct TalkButtonView: View {
         } else if voiceManager.slideOffset > 50 {
             voiceManager.currentSlideAction = .confirm
         } else {
-            voiceManager.currentSlideAction = .none
+            voiceManager.currentSlideAction = VoiceControlManager.SlideAction.none
         }
     }
     
@@ -147,7 +147,7 @@ struct TalkButtonView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             voiceManager.showSlideControls = false
             voiceManager.slideOffset = 0
-            voiceManager.currentSlideAction = .none
+            voiceManager.currentSlideAction = VoiceControlManager.SlideAction.none
         }
     }
 }
