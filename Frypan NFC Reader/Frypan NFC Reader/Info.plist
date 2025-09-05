@@ -73,6 +73,12 @@
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>需要使用語音識別功能來將您的語音轉換為文字</string>
     
+    <!-- 音頻播放權限 -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    
     <!-- App Transport Security 設定 - 允許 HTTP 連接到開發服務器 -->
     <key>NSAppTransportSecurity</key>
     <dict>

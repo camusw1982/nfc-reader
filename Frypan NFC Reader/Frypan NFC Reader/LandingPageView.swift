@@ -20,6 +20,9 @@ struct LandingPageView: View {
     @State private var showSlideControls = false
     @State private var isRecordingConfirmed = false
     @State private var scrollID: UUID? = nil
+    @State private var isInitialized = false
+    @State private var pulseAnimation: Bool = false
+    @State private var currentSlideAction: SlideAction? = nil
     
     init() {
         self._speechRecognizer = StateObject(wrappedValue: SpeechRecognizer())
@@ -28,6 +31,13 @@ struct LandingPageView: View {
     // 獲取 WebSocketManager 實例
     private var webSocketManager: WebSocketManager? {
         speechRecognizer.webService.getWebSocketManager()
+    }
+    
+    // 滑動操作枚舉
+    enum SlideAction {
+        case cancel
+        case confirm
+        case none
     }
     
     var body: some View {
@@ -70,38 +80,38 @@ struct LandingPageView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 16)
                 
-                // WebSocket 和音頻狀態欄
-                if webSocketManager?.isPlayingAudio == true {
-                    HStack(spacing: 8) {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .foregroundColor(.blue)
-                            .font(.system(size: 14))
-                        
-                        ProgressView(value: webSocketManager?.audioProgress ?? 0.0)
-                            .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                            .frame(height: 4)
-                        
-                        Text("播放中...")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            webSocketManager?.stopAudio()
-                        }) {
-                            Image(systemName: "stop.fill")
-                                .foregroundColor(.red)
-                                .font(.system(size: 14))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-                }
+                // WebSocket 和音頻狀態欄 - 已隱藏
+                // if webSocketManager?.isPlayingAudio == true {
+                //     HStack(spacing: 8) {
+                //         Image(systemName: "speaker.wave.2.fill")
+                //             .foregroundColor(.blue)
+                //             .font(.system(size: 14))
+                //         
+                //         ProgressView(value: webSocketManager?.audioProgress ?? 0.0)
+                //             .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                //             .frame(height: 4)
+                //         
+                //         Text("播放中...")
+                //             .font(.caption)
+                //             .foregroundColor(.blue)
+                //         
+                //         Spacer()
+                //         
+                //         Button(action: {
+                //             webSocketManager?.stopAudio()
+                //         }) {
+                //             Image(systemName: "stop.fill")
+                //                 .foregroundColor(.red)
+                //                 .font(.system(size: 14))
+                //         }
+                //     }
+                //     .padding(.horizontal, 16)
+                //     .padding(.vertical, 8)
+                //     .background(Color.blue.opacity(0.1))
+                //     .cornerRadius(8)
+                //     .padding(.horizontal, 20)
+                //     .padding(.bottom, 8)
+                // }
                 
                 // 對話區域
                 ScrollViewReader { proxy in
@@ -172,15 +182,10 @@ struct LandingPageView: View {
                             .fill(slideOffset < -50 ? Color.red.opacity(0.8) : Color.red.opacity(0.3))
                             .frame(width: 60, height: 60)
                             .overlay(
-                                VStack(spacing: 2) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .scaleEffect(slideOffset < -50 ? 1.2 : 1.0)
-                                    Text("取消")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(.white)
-                                }
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .scaleEffect(slideOffset < -50 ? 1.2 : 1.0)
                             )
                             .animation(.easeInOut(duration: 0.2), value: slideOffset)
                         
@@ -189,15 +194,10 @@ struct LandingPageView: View {
                             .fill(slideOffset > 50 ? Color.green.opacity(0.8) : Color.green.opacity(0.3))
                             .frame(width: 60, height: 60)
                             .overlay(
-                                VStack(spacing: 2) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .scaleEffect(slideOffset > 50 ? 1.2 : 1.0)
-                                    Text("確認")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(.white)
-                                }
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .scaleEffect(slideOffset > 50 ? 1.2 : 1.0)
                             )
                             .animation(.easeInOut(duration: 0.2), value: slideOffset)
                     }
@@ -219,9 +219,13 @@ struct LandingPageView: View {
                             .fill(Color.clear)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.blue.opacity(0.5), lineWidth: 2)
-                                    .scaleEffect(isPressingTalkButton ? 1.2 : 1.0)
-                                    .opacity(isPressingTalkButton ? 0.3 : 0.8)
+                                    .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                                    .scaleEffect(pulseAnimation ? 1.4 : 1.0)
+                                    .opacity(pulseAnimation ? 0.2 : 0.8)
+                                    .animation(
+                                        Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                                        value: pulseAnimation
+                                    )
                             )
                             .frame(width: 100, height: 100)
                         
@@ -233,23 +237,25 @@ struct LandingPageView: View {
                             .animation(.easeInOut(duration: 0.2), value: slideOffset)
                             .animation(.easeInOut(duration: 0.2), value: isPressingTalkButton)
                         
-                        // 麥克風圖標和文字
-                        VStack(spacing: 4) {
-                            Image(systemName: speechRecognizer.isRecognizing ? "mic.fill" : "mic")
-                                .font(.system(size: 24, weight: .semibold))
-                                .foregroundColor(.white)
-                            Text(speechRecognizer.isRecognizing ? (slideOffset < -50 ? "滑動取消" : slideOffset > 50 ? "滑動確認" : "錄音中") : "按住講話")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                        }
+                        // 麥克風圖標
+                        Image(systemName: speechRecognizer.isRecognizing ? "mic.fill" : "mic")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundColor(.white)
                     }
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            // 確保初始化完成
+                            guard isInitialized else {
+                                print("⚠️ 按壓說話功能尚未初始化完成")
+                                return
+                            }
+                            
                             isPressingTalkButton = true
                             
                             if !speechRecognizer.isRecognizing {
+                                print("🎤 開始語音識別")
                                 startSpeechRecognition()
                                 DispatchQueue.main.async {
                                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -268,24 +274,50 @@ struct LandingPageView: View {
                             // 計算滑動偏移，限制最大滑動距離
                             slideOffset = max(-100, min(100, value.translation.width))
                             
-                            // 檢查是否達到取消或確認閾值
-                            if slideOffset < -60 && !isRecordingConfirmed {
-                                // 取消錄音
-                                cancelRecording()
-                            } else if slideOffset > 60 && !isRecordingConfirmed {
-                                // 確認錄音
-                                confirmRecording()
+                            // 更新當前滑動操作狀態，但不立即執行
+                            if slideOffset < -50 {
+                                currentSlideAction = .cancel
+                            } else if slideOffset > 50 {
+                                currentSlideAction = .confirm
+                            } else {
+                                currentSlideAction = SlideAction.none
                             }
                         }
                         .onEnded { value in
                             isPressingTalkButton = false
                             
-                            if !isRecordingConfirmed {
-                                // 如果冇確認，正常停止錄音
+                            // 根據手指離開時的位置決定操作
+                            if let action = currentSlideAction {
+                                switch action {
+                                case .cancel:
+                                    print("🚫 手指離開取消區域，取消錄音")
+                                    cancelRecording()
+                                    // 取消操作後重置狀態
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        self.resetRecordingState()
+                                    }
+                                case .confirm:
+                                    print("✅ 手指離開確認區域，確認錄音")
+                                    confirmRecording()
+                                    // 確認操作後重置狀態
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                        self.resetRecordingState()
+                                    }
+                                case .none:
+                                    print("⚠️ 手指離開中性區域，視為取消")
+                                    if speechRecognizer.isRecognizing {
+                                        stopSpeechRecognition()
+                                    }
+                                    // 延遲重置所有狀態
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        self.resetRecordingState()
+                                    }
+                                }
+                            } else {
+                                print("⚠️ 手指離開，currentSlideAction 為 nil，視為取消")
                                 if speechRecognizer.isRecognizing {
                                     stopSpeechRecognition()
                                 }
-                                
                                 // 延遲重置所有狀態
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                     self.resetRecordingState()
@@ -296,6 +328,7 @@ struct LandingPageView: View {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showSlideControls = false
                                 slideOffset = 0
+                                currentSlideAction = SlideAction.none
                             }
                         }
                 )
@@ -323,20 +356,20 @@ struct LandingPageView: View {
                             .foregroundColor(webSocketManager?.isConnected == true ? Color.green : Color.white.opacity(0.7))
                     }
                     
-                    Button(action: {
-                        webSocketManager?.checkConnectionStatus()
-                    }) {
-                        Image(systemName: "network")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
+                    //Button(action: {
+                    //    webSocketManager?.checkConnectionStatus()
+                    //}) {
+                    //    Image(systemName: "network")
+                    //        .font(.system(size: 18))
+                    //        .foregroundColor(.white.opacity(0.7))
+                    //}
                     
                     Button(action: {
                         webSocketManager?.clearHistory()
                     }) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 18))
-                            .foregroundColor(.white.opacity(0.7))
+                           .foregroundColor(.white.opacity(0.7))
                     }
                     
                     Button(action: {
@@ -359,25 +392,42 @@ struct LandingPageView: View {
             Text("請到「設定」>「隱私權與安全性」>「語音識別」中允許此應用程式存取語音識別功能")
         }
         .onAppear {
-            // 自動連接 WebSocket
-            webSocketManager?.connect()
+            // 初始化按壓說話功能
+            initializePressToTalk()
             
-            // 延遲檢查連接狀態
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            // 啟動脈衝動畫
+            startPulseAnimation()
+            
+            // 只在未連接時才檢查連接狀態，避免重複連接
+            if webSocketManager?.isConnected != true {
                 webSocketManager?.checkConnectionStatus()
-            }
-            
-            // 定期檢查連接狀態
-            Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
-                if webSocketManager?.isConnected != true {
-                    webSocketManager?.checkConnectionStatus()
-                }
             }
         }
         .onDisappear {
             // 停止語音識別和斷開 WebSocket
             speechRecognizer.stopRecording()
             webSocketManager?.disconnect()
+        }
+    }
+    
+    private func initializePressToTalk() {
+        // 重置所有狀態變量
+        DispatchQueue.main.async {
+            self.isPressingTalkButton = false
+            self.slideOffset = 0
+            self.showSlideControls = false
+            self.isRecordingConfirmed = false
+            self.currentSlideAction = SlideAction.none
+            self.speechRecognizer.isRecordingCancelled = false
+            
+            // 確保語音識別器處於正確狀態
+            if self.speechRecognizer.isRecognizing {
+                self.speechRecognizer.stopRecording()
+            }
+            
+            // 標記初始化完成
+            self.isInitialized = true
+            print("✅ 按壓說話功能初始化完成")
         }
     }
     
@@ -395,6 +445,12 @@ struct LandingPageView: View {
     }
     
     private func cancelRecording() {
+        // 防止重複取消
+        guard !isRecordingConfirmed else {
+            print("⚠️ 錄音已經被處理，忽略重複取消")
+            return
+        }
+        
         isRecordingConfirmed = true
         
         // 設置取消標誌，防止任何發送
@@ -410,63 +466,91 @@ struct LandingPageView: View {
             self.speechRecognizer.recognizedText = ""
         }
         
-        // 立即添加取消消息
-        let cancelMessage = ChatMessage(text: "❌ 錄音已取消", isUser: true, timestamp: Date(), isError: true)
-        speechRecognizer.messages.append(cancelMessage)
-        
         // 震動反饋
         let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
         impactFeedback.impactOccurred()
-        
-        // 重置錄音狀態
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.resetRecordingState()
-        }
         
         print("🚫 錄音已取消，不會發送任何內容")
     }
     
     private func resetRecordingState() {
         DispatchQueue.main.async {
+            // 重置所有錄音相關狀態
             self.isRecordingConfirmed = false
             self.isPressingTalkButton = false
             self.showSlideControls = false
             self.slideOffset = 0
+            self.currentSlideAction = SlideAction.none
             self.speechRecognizer.isRecordingCancelled = false
-            print("🔄 錄音狀態已重置")
+            
+            // 確保語音識別器處於正確狀態
+            if self.speechRecognizer.isRecognizing {
+                self.speechRecognizer.stopRecording()
+            }
+            
+            // 清空識別文本
+            self.speechRecognizer.recognizedText = ""
+            
+            print("🔄 錄音狀態已完全重置")
         }
     }
     
     private func confirmRecording() {
-        isRecordingConfirmed = true
-        let recognizedText = speechRecognizer.recognizedText
-        speechRecognizer.stopRecording()
+        // 防止重複確認
+        guard !isRecordingConfirmed else {
+            print("⚠️ 錄音已經被處理，忽略重複確認")
+            return
+        }
         
-        // 發送到 WebSocket 進行語音合成
-        if !recognizedText.isEmpty {
+        isRecordingConfirmed = true
+        let recognizedText = speechRecognizer.recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        print("✅ 確認錄音，識別文本: '\(recognizedText)'")
+        
+        // 先停止錄音，但不發送結果（因為我們會手動發送）
+        speechRecognizer.stopRecording(shouldSendResult: false)
+        
+        // 檢查是否有有效的錄音內容
+        if !recognizedText.isEmpty && recognizedText.count > 0 {
             // 立即添加用戶消息到對話列表
             let userMessage = ChatMessage(text: recognizedText, isUser: true, timestamp: Date(), isError: false)
             speechRecognizer.messages.append(userMessage)
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                // 發送到 WebSocket 進行語音合成
-                webSocketManager?.sendTextToSpeech(text: recognizedText)
-                
-                // 重置錄音狀態
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self.resetRecordingState()
-                }
-            }
+            print("📤 準備發送文本到服務器: '\(recognizedText)'")
+            
+            // 立即發送到 WebSocket 進行語音合成
+            webSocketManager?.sendTextToSpeech(text: recognizedText)
+            
+            // 成功確認的震動反饋
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
         } else {
-            // 如果冇識別文本，直接重置狀態
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.resetRecordingState()
-            }
+            print("⚠️ 沒有有效錄音內容，視為取消操作")
+            // 如果沒有有效錄音內容，視為取消操作
+            handleEmptyRecordingAsCancel()
+        }
+    }
+    
+    private func handleEmptyRecordingAsCancel() {
+        // 立即清空識別文本
+        DispatchQueue.main.async {
+            self.speechRecognizer.recognizedText = ""
         }
         
-        // 震動反饋
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        // 取消的震動反饋
+        let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
         impactFeedback.impactOccurred()
+        
+        print("🚫 空錄音已視為取消，不會發送任何內容")
+    }
+    
+    private func startPulseAnimation() {
+        // 啟動脈衝動畫，3秒完整週期（1.5秒放大，1.5秒縮小）
+        withAnimation(
+            Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)
+        ) {
+            pulseAnimation = true
+        }
     }
 }
 
@@ -505,7 +589,7 @@ struct UserBubbleView: View {
                     .padding(.vertical, 12)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -549,7 +633,7 @@ struct AIBubbleView: View {
                     .padding(.vertical, 12)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.2)]),
+                            gradient: Gradient(colors: [Color.gray.opacity(0.4), Color.gray.opacity(0.2)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )

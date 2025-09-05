@@ -9,6 +9,26 @@ import Foundation
 import Combine
 import AVFoundation
 
+// MARK: - Data Extension for Hex String
+extension Data {
+    init?(hexString: String) {
+        let len = hexString.count / 2
+        var data = Data(capacity: len)
+        var i = hexString.startIndex
+        for _ in 0..<len {
+            let j = hexString.index(i, offsetBy: 2)
+            let bytes = hexString[i..<j]
+            if var num = UInt8(bytes, radix: 16) {
+                data.append(&num, count: 1)
+            } else {
+                return nil
+            }
+            i = j
+        }
+        self = data
+    }
+}
+
 class WebSocketManager: NSObject, ObservableObject {
     @Published var isConnected = false
     @Published var connectionStatus: String = "未連接"
@@ -18,6 +38,7 @@ class WebSocketManager: NSObject, ObservableObject {
     // 音頻播放相關
     @Published var isPlayingAudio = false
     @Published var audioProgress: Double = 0.0
+    private var hasStartedPlayback = false
     @Published var geminiResponse: String = ""
     @Published var connectionId: String = ""
     
@@ -31,6 +52,8 @@ class WebSocketManager: NSObject, ObservableObject {
     private var audioChunks: [Data] = []
     private var expectedChunks: Int = 0
     private var audioSession: AVAudioSession?
+    private var playbackTimer: Timer?
+    private var lastChunkTime: Date = .distantPast
     
     override init() {
         // WebSocket 服務器地址
@@ -186,18 +209,108 @@ class WebSocketManager: NSObject, ObservableObject {
     private func setupAudioSession() {
         do {
             audioSession = AVAudioSession.sharedInstance()
+            
+            // 先停用音頻會話，然後重新設置
+            try audioSession?.setActive(false)
+            
+            // 使用更簡單的 playback 類別設置
             try audioSession?.setCategory(.playback, mode: .default)
             try audioSession?.setActive(true)
             print("🎵 音頻會話設置成功")
+            
+            // 監聽音頻會話中斷通知
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAudioSessionInterruption),
+                name: AVAudioSession.interruptionNotification,
+                object: audioSession
+            )
+            
+            // 監聽音頻路線變化通知
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAudioRouteChange),
+                name: AVAudioSession.routeChangeNotification,
+                object: audioSession
+            )
+            
         } catch {
             print("❌ 音頻會話設置失敗: \(error.localizedDescription)")
+            print("❌ 錯誤代碼: \(error)")
+            
+            // 如果設置失敗，嘗試最基本的設置
+            do {
+                try audioSession?.setCategory(.playback)
+                print("🎵 音頻會話基本設置成功")
+            } catch {
+                print("❌ 音頻會話基本設置也失敗: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    @objc private func handleAudioSessionInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+        
+        switch type {
+        case .began:
+            print("🔇 音頻會話被中斷")
+            DispatchQueue.main.async {
+                self.isPlayingAudio = false
+                self.audioPlayer?.pause()
+            }
+        case .ended:
+            print("🔊 音頻會話中斷結束")
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) {
+                    print("🔄 恢復音頻播放")
+                    DispatchQueue.main.async {
+                        self.audioPlayer?.play()
+                    }
+                }
+            }
+        @unknown default:
+            break
+        }
+    }
+    
+    @objc private func handleAudioRouteChange(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+        
+        switch reason {
+        case .oldDeviceUnavailable:
+            print("🎧 音頻設備不可用")
+            DispatchQueue.main.async {
+                self.audioPlayer?.pause()
+                self.isPlayingAudio = false
+            }
+        case .newDeviceAvailable:
+            print("🎧 新音頻設備可用")
+        default:
+            break
         }
     }
     
     private func handleAudioChunk(_ json: [String: Any]) {
-        print("🔍 開始解析音頻 chunk...")
-        print("📦 收到嘅 JSON: \(json)")
+        // 檢查是否為 MiniMax 格式
+        if let data = json["data"] as? [String: Any],
+           let audioHex = data["audio"] as? String,
+           let status = data["status"] as? Int {
+            
+            // MiniMax 格式處理
+            handleMiniMaxAudioChunk(audioHex: audioHex, status: status)
+            return
+        }
         
+        // 兼容舊格式
         guard let audioDataBase64 = json["audio_data"] as? String else {
             print("❌ 音頻 chunk 解析失敗: 冇 audio_data 字段")
             return
@@ -208,48 +321,135 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
-        guard let totalChunks = json["total_chunks"] as? Int else {
-            print("❌ 音頻 chunk 解析失敗: 冇 total_chunks 字段")
-            return
-        }
-        
-        print("📊 音頻 chunk 資訊: index=\(chunkIndex), total=\(totalChunks), base64長度=\(audioDataBase64.count)")
+        // 處理 total_chunks，可能為 nil 或 -1（表示未知總數）
+        let totalChunks = json["total_chunks"] as? Int ?? -1
         
         guard let audioData = Data(base64Encoded: audioDataBase64) else {
             print("❌ Base64 解碼失敗")
             return
         }
         
-        print("✅ 音頻 chunk 解碼成功: 大小=\(audioData.count) bytes")
-        
-        // 存儲音頻 chunk
+        // 將所有 chunk 添加到緩衝區，按順序播放
         audioChunks.append(audioData)
-        expectedChunks = totalChunks
         
-        print("🎵 收到音頻 chunk \(chunkIndex)/\(totalChunks), 總共收集到 \(audioChunks.count) 個 chunk")
+        // 如果 totalChunks 有效，設置 expectedChunks
+        if totalChunks > 0 {
+            expectedChunks = totalChunks
+        }
         
-        // 更新進度
-        audioProgress = Double(audioChunks.count) / Double(totalChunks)
+        // 更新進度（如果知道總數）
+        if expectedChunks > 0 {
+            audioProgress = Double(audioChunks.count) / Double(expectedChunks)
+        } else {
+            // 如果唔知道總數，基於已收到嘅 chunk 數量估算進度
+            audioProgress = min(Double(audioChunks.count) / 10.0, 0.95) // 假設最多 10 個 chunk，最多到 95%
+        }
         
-        // 如果收到所有 chunk，準備播放
-        if audioChunks.count == expectedChunks {
-            print("🎯 所有音頻 chunk 已收集完畢，開始播放...")
+        // 調試信息
+        debugAudioChunk(chunkIndex, totalChunks, audioData)
+        
+        // 檢查是否應該開始播放
+        checkAndStartPlayback()
+        
+        // 使用 chunkIndex 進行調試（避免編譯警告）
+        if chunkIndex == 0 {
+            print("🚀 開始接收音頻串流...")
+        }
+    }
+    
+    private func handleMiniMaxAudioChunk(audioHex: String, status: Int) {
+        // 將 hex 字符串轉換為 Data
+        guard let audioData = Data(hexString: audioHex) else {
+            print("❌ Hex 音頻數據解碼失敗")
+            return
+        }
+        
+        print("📦 收到 MiniMax 音頻 chunk: \(audioData.count) bytes, status: \(status)")
+        
+        // 將音頻數據添加到緩衝區
+        audioChunks.append(audioData)
+        
+        // 更新進度（基於狀態）
+        if status == 1 {
+            // 進行中，估算進度
+            audioProgress = min(Double(audioChunks.count) / 10.0, 0.9)
+        } else if status == 2 {
+            // 完成
+            audioProgress = 1.0
+            expectedChunks = audioChunks.count
+        }
+        
+        // 調試信息
+        print("📊 緩衝區狀態: \(audioChunks.count) chunks, 總大小: \(audioChunks.reduce(0) { $0 + $1.count }) bytes")
+        
+        // 檢查是否應該開始播放
+        if status == 1 {
+            // 進行中，檢查是否應該開始播放
+            checkAndStartPlayback()
+        } else if status == 2 {
+            // 完成，立即播放所有緩衝的內容
+            print("🎯 MiniMax 音頻串流完成，播放所有內容...")
+            playAudio()
+        }
+    }
+    
+    private func checkAndStartPlayback() {
+        // 如果正在播放音頻，不要開始新的播放
+        if isPlayingAudio {
+            print("🎵 音頻正在播放中，等待完成...")
+            return
+        }
+        
+        // 更新最後收到 chunk 嘅時間
+        lastChunkTime = Date()
+        
+        print("📊 音頻緩衝狀態: \(audioChunks.count) chunks, 期望: \(expectedChunks), 已開始播放: \(hasStartedPlayback)")
+        
+        // 如果知道總數且已收集完所有 chunk，立即播放
+        if expectedChunks > 0 && audioChunks.count == expectedChunks {
+            print("🎯 音頻串流完成，播放緩衝內容...")
+            playAudio()
+            return
+        }
+        
+        // 如果唔知道總數，只在第一次收到足夠 chunk 時設置計時器
+        if expectedChunks <= 0 && playbackTimer == nil && !hasStartedPlayback {
+            // 如果收到至少 3 個 chunk，設置 0.5 秒後播放（更快的響應）
+            if audioChunks.count >= 3 {
+                print("⏰ 設置 0.5 秒後播放計時器...")
+                playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+                    self?.playAudio()
+                }
+            }
+        }
+        
+        // 如果收到好多 chunk 但冇播放，強制播放（但不要中斷當前播放）
+        if audioChunks.count >= 10 && expectedChunks <= 0 && !isPlayingAudio && !hasStartedPlayback {
+            print("🚀 緩衝區已滿，開始播放...")
             playAudio()
         }
     }
     
     private func playAudio() {
-        guard audioChunks.count == expectedChunks else {
-            print("⏳ 等待更多音頻 chunk... 當前: \(audioChunks.count)/\(expectedChunks)")
+        // 允許播放即使唔知道總 chunk 數量
+        guard !audioChunks.isEmpty else {
+            print("⏳ 冇音頻 chunk 可播放")
             return
         }
         
-        print("🔄 開始合併音頻 chunk...")
+        // 清除播放計時器
+        playbackTimer?.invalidate()
+        playbackTimer = nil
+        
+        // 標記已開始播放
+        hasStartedPlayback = true
+        
+        print("🔄 開始合併音頻 chunk: \(audioChunks.count) 個")
         
         // 合併所有音頻 chunk
         let combinedAudioData = audioChunks.reduce(Data()) { $0 + $1 }
         
-        print("✅ 音頻合併完成: 總大小=\(combinedAudioData.count) bytes, chunk數量=\(audioChunks.count)")
+        print("✅ 音頻合併完成: 總大小=\(combinedAudioData.count) bytes")
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -260,8 +460,6 @@ class WebSocketManager: NSObject, ObservableObject {
             
             self.isPlayingAudio = true
             self.audioProgress = 1.0
-            
-            print("🎵 準備播放音頻...")
             
             do {
                 // 嘗試創建 AVAudioPlayer
@@ -281,58 +479,49 @@ class WebSocketManager: NSObject, ObservableObject {
                 let duration = player.duration
                 print("🕐 音頻時長: \(duration) 秒")
                 
-                // 檢查音頻格式
-                print("🎵 音頻資訊: URL=\(player.url?.absoluteString ?? "nil"), 數據大小=\(combinedAudioData.count) bytes")
+                // 安全激活音頻會話
+                _ = self.safeActivateAudioSession()
                 
-                // 確保音頻會話設置正確
-                do {
-                    try AVAudioSession.sharedInstance().setActive(true)
-                    print("🔊 音頻會話已激活")
-                } catch {
-                    print("⚠️ 音頻會話激活失敗: \(error.localizedDescription)")
-                }
+                // 設置音量為最大
+                player.volume = 1.0
                 
                 // 嘗試播放
                 let success = player.play()
-                print("🎵 播放結果: \(success)")
                 
                 if success {
-                    print("✅ 音頻開始播放成功")
+                    print("✅ 音頻播放開始")
                 } else {
-                    print("❌ 音頻播放失敗 (play() 返回 false)")
+                    print("❌ 音頻播放失敗")
                     self.isPlayingAudio = false
                     self.audioPlayer = nil
                 }
                 
             } catch {
                 print("❌ 音頻播放失敗: \(error.localizedDescription)")
-                print("❌ 錯誤詳情: \(error)")
                 self.lastError = "音頻播放失敗: \(error.localizedDescription)"
                 self.isPlayingAudio = false
                 self.audioPlayer = nil
             }
             
-            // 重置為下一次音頻
+            // 清空當前播放的 chunk，但保留 expectedChunks 用於後續播放
             self.audioChunks.removeAll()
-            self.expectedChunks = 0
         }
     }
     
     func stopAudio() {
+        // 停止音頻播放器
         audioPlayer?.stop()
         audioPlayer = nil
+        
         isPlayingAudio = false
         audioProgress = 0.0
+        hasStartedPlayback = false
         audioChunks.removeAll()
         expectedChunks = 0
         
-        // 停用音頻會話以釋放資源
-        do {
-            try AVAudioSession.sharedInstance().setActive(false)
-            print("🔊 音頻會話已停用")
-        } catch {
-            print("⚠️ 音頻會話停用失敗: \(error.localizedDescription)")
-        }
+        // 清理計時器
+        playbackTimer?.invalidate()
+        playbackTimer = nil
         
         print("🛑 停止音頻播放")
     }
@@ -342,6 +531,108 @@ class WebSocketManager: NSObject, ObservableObject {
         stopAudio()
         geminiResponse = ""
         lastError = nil
+    }
+    
+    // MARK: - 音頻播放處理
+    
+    private func debugAudioChunk(_ chunkIndex: Int, _ totalChunks: Int, _ audioData: Data) {
+        print("📦 Chunk \(chunkIndex)/\(totalChunks > 0 ? String(totalChunks) : "?"): \(audioData.count) bytes")
+        print("📊 緩衝區狀態: \(audioChunks.count) chunks, 總大小: \(audioChunks.reduce(0) { $0 + $1.count }) bytes")
+    }
+    
+    private func safeActivateAudioSession() -> Bool {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            
+            // 先停用會話，避免衝突
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+            
+            // 設置音頻會話類別
+            try session.setCategory(.playback, mode: .default, options: [])
+            
+            // 激活會話
+            try session.setActive(true)
+            return true
+        } catch {
+            // 靜默處理錯誤，不輸出日誌
+            return false
+        }
+    }
+    
+    private func streamAudioChunk(_ audioData: Data) {
+        // 將音頻數據添加到緩衝區，統一使用緩衝區播放
+        audioChunks.append(audioData)
+        checkAndStartPlayback()
+    }
+    
+    private func audioDataToPCMBuffer(_ data: Data) -> AVAudioPCMBuffer? {
+        // MiniMax 音頻格式檢測和處理
+        print("🔍 分析音頻數據格式: \(data.count) bytes")
+        
+        // 檢查是否為 MP3 格式
+        if data.count > 3 {
+            let header = data.subdata(in: 0..<3)
+            if header[0] == 0xFF && (header[1] & 0xE0) == 0xE0 {
+                print("🎵 檢測到 MP3 格式")
+                return nil // MP3 不能直接轉換為 PCM buffer，使用 AVAudioPlayer
+            }
+        }
+        
+        // 檢查是否為 WAV 格式
+        if data.count > 44 && String(data: data.subdata(in: 0..<4), encoding: .ascii) == "RIFF" {
+            print("🎵 檢測到 WAV 格式")
+            // 提取 PCM 數據（跳過 WAV header）
+            let pcmData = data.subdata(in: 44..<data.count)
+            return convertPCMDataToBuffer(pcmData, sampleRate: 24000.0, channels: 1)
+        }
+        
+        // 檢查是否為其他音頻格式
+        if data.count > 4 {
+            let header = data.subdata(in: 0..<4)
+            let headerString = String(data: header, encoding: .ascii) ?? ""
+            print("🎵 音頻頭部: \(headerString)")
+        }
+        
+        // 對於未知格式，嘗試作為原始 PCM 處理
+        print("🎵 嘗試作為原始 PCM 數據處理")
+        return convertPCMDataToBuffer(data, sampleRate: 24000.0, channels: 1)
+    }
+    
+    private func convertPCMDataToBuffer(_ pcmData: Data, sampleRate: Double, channels: UInt32) -> AVAudioPCMBuffer? {
+        // 創建音頻格式
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: channels, interleaved: false) else {
+            print("❌ 音頻格式創建失敗")
+            return nil
+        }
+        
+        let bytesPerFrame = format.streamDescription.pointee.mBytesPerFrame
+        let frameCount = UInt32(pcmData.count) / bytesPerFrame
+        
+        guard frameCount > 0 else {
+            print("❌ 音頻數據太短: \(pcmData.count) bytes")
+            return nil
+        }
+        
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            print("❌ 音頻緩衝區創建失敗")
+            return nil
+        }
+        
+        buffer.frameLength = frameCount
+        
+        // 將 16-bit PCM 數據轉換為 Float32
+        let channelData = buffer.floatChannelData![0]
+        pcmData.withUnsafeBytes { (rawBytes: UnsafeRawBufferPointer) in
+            let int16Data = rawBytes.bindMemory(to: Int16.self)
+            for i in 0..<Int(frameCount) {
+                if i < int16Data.count {
+                    channelData[i] = Float(int16Data[i]) / Float(Int16.max)
+                }
+            }
+        }
+        
+        print("✅ 音頻數據轉換成功: \(frameCount) frames, \(format.sampleRate)Hz, \(format.channelCount) channels")
+        return buffer
     }
     
     // MARK: - 服務器功能
@@ -432,10 +723,6 @@ class WebSocketManager: NSObject, ObservableObject {
     }
     
     private func handleTextMessage(_ text: String) {
-        print("📥 收到 WebSocket 消息:")
-        print("📄 消息內容: \(text)")
-        print("📏 消息長度: \(text.count) 字符")
-        
         // 添加到消息列表
         receivedMessages.append(text)
         
@@ -446,21 +733,13 @@ class WebSocketManager: NSObject, ObservableObject {
         
         // 解析消息類型
         if let data = text.data(using: .utf8) {
-            print("🔄 嘗試解析 JSON...")
-            
             if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                print("✅ JSON 解析成功")
-                print("📋 JSON 內容: \(json)")
-                
                 if let type = json["type"] as? String {
-                    print("🏷️ 消息類型: \(type)")
-                    
                     switch type {
                     case "response", "gemini_response":
                         // Gemini 服務器嘅回應
-                        print("🤖 處理 Gemini 回應...")
                         if let response = json["response"] as? String {
-                            print("💬 Gemini 回應內容: \(response)")
+                            print("🤖 收到 Gemini 回應")
                             DispatchQueue.main.async {
                                 self.geminiResponse = response
                             }
@@ -473,14 +752,13 @@ class WebSocketManager: NSObject, ObservableObject {
                         self.resetAudioState()
                         
                     case "audio_chunk":
-                        // 音頻 chunk
-                        print("🎵 收到音頻 chunk，開始處理...")
+                        // 音頻 chunk（靜默處理）
                         handleAudioChunk(json)
                         
                     case "audio_complete":
                         // 音頻發送完成
-                        print("🎵 音頻發送完成")
-                        // 音頻會在收到所有 chunk 後自動播放
+                        print("🎯 音頻串流完成，等待播放...")
+                        // 不強制播放，讓 audioPlayerDidFinishPlaying 來處理
                         
                     case "pong":
                         print("🏓 收到服務器 pong 響應")
@@ -492,7 +770,6 @@ class WebSocketManager: NSObject, ObservableObject {
                     case "history":
                         if let history = json["history"] as? [[String: Any]] {
                             print("📚 收到歷史記錄: \(history.count) 條")
-                            // 可以在這裡處理歷史記錄
                         }
                         
                     case "error":
@@ -510,22 +787,20 @@ class WebSocketManager: NSObject, ObservableObject {
                         
                     default:
                         print("📨 收到其他類型消息: \(type)")
-                        print("📦 完整消息: \(json)")
                     }
                 } else {
-                    print("⚠️ JSON 中冇 type 字段")
-                    print("📦 完整 JSON: \(json)")
+                    // 沒有 type 字段，檢查是否為 MiniMax 音頻格式
+                    if json["data"] is [String: Any],
+                       let data = json["data"] as? [String: Any],
+                       data["audio"] is String {
+                        print("🎵 檢測到 MiniMax 音頻格式（無 type 字段）")
+                        handleAudioChunk(json)
+                    } else {
+                        print("📨 收到未知格式消息")
+                    }
                 }
-            } else {
-                print("❌ JSON 解析失敗")
-                print("📄 原始數據: \(data.base64EncodedString())")
             }
-        } else {
-            print("❌ 消息轉換為 Data 失敗")
         }
-        
-        // 如果冇 type 字段，可能係直接嘅文本回應
-        print("🤖 收到文本回應: \(text)")
     }
     
     private func handleConnectionError(_ error: Error) {
@@ -570,6 +845,8 @@ class WebSocketManager: NSObject, ObservableObject {
     
     deinit {
         disconnect()
+        // 移除通知監聽器
+        NotificationCenter.default.removeObserver(self)
     }
 }
 
@@ -581,6 +858,17 @@ extension WebSocketManager: AVAudioPlayerDelegate {
             self.audioProgress = 0.0
             self.audioPlayer = nil  // 重置音頻播放器
             print("🎵 音頻播放完成，播放器已重置")
+            
+            // 檢查是否有新的 chunk 需要播放
+            if !self.audioChunks.isEmpty {
+                print("🔄 檢測到新 chunk，開始播放...")
+                self.playAudio()
+            } else {
+                print("✅ 所有音頻播放完成")
+                // 重置狀態為下一次音頻流做準備
+                self.expectedChunks = 0
+                self.hasStartedPlayback = false
+            }
         }
     }
     

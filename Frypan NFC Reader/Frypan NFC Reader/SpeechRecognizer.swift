@@ -118,7 +118,10 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
                 let transcribedString = result.bestTranscription.formattedString
                 DispatchQueue.main.async {
                     self.recognizedText = transcribedString
-                    print("🎤 識別結果: \(transcribedString)")
+                    // 只在識別完成時輸出日誌，不在每次部分結果時輸出
+                    if result.isFinal {
+                        print("🎤 語音識別完成: \(transcribedString)")
+                    }
                 }
             }
             
