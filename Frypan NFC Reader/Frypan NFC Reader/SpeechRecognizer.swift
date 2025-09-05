@@ -11,14 +11,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 
-// 對話消息模型
-struct ChatMessage: Identifiable, Equatable {
-    let id = UUID()
-    let text: String
-    let isUser: Bool
-    let timestamp: Date
-    let isError: Bool
-}
+// ChatMessage 已移至 ChatComponents.swift
 
 class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     @Published var isRecognizing = false
