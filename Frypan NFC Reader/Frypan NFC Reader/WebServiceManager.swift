@@ -28,9 +28,9 @@ class WebServiceManager: ObservableObject {
             self.serverURL = URL(string: "http://localhost:8080/api/speech-result")!
         }
         
-        // 初始化 WebSocket 管理器
+        // 初始化 WebSocket 管理器，但不自動連接
         self.webSocketManager = WebSocketManager()
-        self.webSocketManager?.connect()
+        // 移除自動連接，讓用戶手動控制連接
     }
     
     func sendSpeechResult(text: String, completion: @escaping (Bool) -> Void) {

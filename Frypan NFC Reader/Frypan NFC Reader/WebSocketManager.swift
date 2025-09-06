@@ -27,6 +27,7 @@ class WebSocketManager: NSObject, ObservableObject {
     private let serverURL: URL
     private var reconnectTimer: Timer?
     private let reconnectDelay: TimeInterval = 3.0
+    private var isManuallyDisconnected = false
     
     // MARK: - Audio Properties
     private let audioManager = AudioStreamManager()
@@ -72,37 +73,59 @@ extension WebSocketManager {
         
         print("🔌 連接到 WebSocket: \(serverURL)")
         
+        // 重置手動斷開標誌
+        isManuallyDisconnected = false
+        
         // 清理舊的連接
         webSocketTask?.cancel()
         webSocketTask = nil
         
+        // 設置連接中狀態
+        DispatchQueue.main.async {
+            self.isConnected = false
+            print("🔧 設置 isConnected = false")
+        }
+        updateConnectionStatus("連接中...")
+        
         webSocketTask = URLSession.shared.webSocketTask(with: serverURL)
         webSocketTask?.resume()
         
-        isConnected = true
-        updateConnectionStatus("已連接")
-        
+        // 開始接收消息
         receiveMessage()
+        
+        // 發送 ping 來測試連接
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            print("📤 發送初始 ping")
+            self.sendPing()
+        }
     }
     
     func disconnect() {
-        print("🔌 斷開 WebSocket 連接")
+        print("🔌 手動斷開 WebSocket 連接")
+        
+        // 設置手動斷開標誌，防止自動重連
+        isManuallyDisconnected = true
+        
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         DispatchQueue.main.async {
             self.isConnected = false
-            self.updateConnectionStatus("已斷開")
         }
+        updateConnectionStatus("已斷開")
         reconnectTimer?.invalidate()
         reconnectTimer = nil
     }
     
     private func scheduleReconnect() {
+        // 如果用戶手動斷開，不自動重連
+        guard !isManuallyDisconnected else {
+            print("🚫 用戶手動斷開，跳過自動重連")
+            return
+        }
+        
         reconnectTimer?.invalidate()
         
-        DispatchQueue.main.async {
-            self.updateConnectionStatus("3 秒後重新連接...")
-        }
+        updateConnectionStatus("3 秒後重新連接...")
         
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: reconnectDelay, repeats: false) { [weak self] _ in
             self?.connect()
@@ -110,8 +133,10 @@ extension WebSocketManager {
     }
     
     private func updateConnectionStatus(_ status: String) {
-        connectionStatus = status
-        print("📊 連接狀態: \(status)")
+        DispatchQueue.main.async {
+            self.connectionStatus = status
+            print("📊 連接狀態更新: \(status) (當前 isConnected: \(self.isConnected))")
+        }
     }
 }
 
@@ -131,13 +156,17 @@ extension WebSocketManager {
             if let error = error {
                 DispatchQueue.main.async {
                     self?.lastError = "發送失敗: \(error.localizedDescription)"
+                    self?.isConnected = false
                     print("❌ WebSocket 發送失敗: \(error.localizedDescription)")
                 }
+                self?.updateConnectionStatus("發送失敗")
             } else {
                 print("✅ WebSocket 發送成功")
+                // 只有在發送成功且當前狀態不是已連接時才更新狀態
                 DispatchQueue.main.async {
                     if !(self?.isConnected ?? false) {
                         self?.isConnected = true
+                        print("🔧 設置 isConnected = true (發送成功)")
                         self?.updateConnectionStatus("已連接")
                     }
                 }
@@ -290,8 +319,11 @@ extension WebSocketManager {
             
         case "pong":
             print("🏓 收到服務器 pong 響應")
-            isConnected = true
-            updateConnectionStatus("已連接")
+            DispatchQueue.main.async {
+                self.isConnected = true
+                print("🔧 設置 isConnected = true (收到 pong)")
+                self.updateConnectionStatus("已連接")
+            }
             
         case "history":
             if let history = json["history"] as? [[String: Any]] {
@@ -306,8 +338,11 @@ extension WebSocketManager {
             
         case "connection_ack":
             print("✅ 服務器確認連接")
-            isConnected = true
-            updateConnectionStatus("已連接")
+            DispatchQueue.main.async {
+                self.isConnected = true
+                print("🔧 設置 isConnected = true (connection_ack)")
+                self.updateConnectionStatus("已連接")
+            }
             
         default:
             print("📨 收到其他類型消息: \(type)")
@@ -347,8 +382,8 @@ extension WebSocketManager {
         DispatchQueue.main.async {
             self.isConnected = false
             self.lastError = "連接錯誤: \(error.localizedDescription)"
-            self.updateConnectionStatus("連接斷開")
         }
+        updateConnectionStatus("連接失敗")
         
         webSocketTask = nil
         scheduleReconnect()
@@ -391,18 +426,18 @@ extension WebSocketManager {
     }
     
     func checkConnectionStatus() {
-        if webSocketTask != nil {
+        if webSocketTask != nil && isConnected {
             sendPing()
         } else if !isConnected {
-            connect()
+            updateConnectionStatus("未連接")
         }
     }
     
     func resetConnectionState() {
         DispatchQueue.main.async {
             self.isConnected = false
-            self.updateConnectionStatus("未連接")
             self.lastError = nil
         }
+        updateConnectionStatus("未連接")
     }
 }

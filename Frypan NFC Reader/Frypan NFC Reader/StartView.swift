@@ -9,11 +9,12 @@ import SwiftUI
 
 struct StartView: View {
     @State private var isAnimating = false
+    @State private var showTestPage = false
     
     var body: some View {
         ZStack {
             // 背景
-            Color(red: 0.11, green: 0.11, blue: 0.11)
+            Color(red: 0.15, green: 0.15, blue: 0.15)
                 .ignoresSafeArea()
             
             VStack {
@@ -46,6 +47,20 @@ struct StartView: View {
                 .padding(.leading, 16)
                 
                 Spacer()
+                
+                // 測試頁面按鈕
+                Button(action: {
+                    showTestPage = true
+                }) {
+                    Text("查看測試頁面")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color(red: 0.85, green: 0.6, blue: 0.16))
+                        .cornerRadius(20)
+                }
+                .padding(.bottom, 50)
             }
         }
         .onAppear {

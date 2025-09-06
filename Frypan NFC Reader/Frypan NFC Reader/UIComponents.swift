@@ -21,7 +21,18 @@ struct HeaderView: View {
                 Spacer()
                 
                 // WebSocket 狀態指示器
-                ConnectionStatusView(webSocketManager: webSocketManager)
+                if let webSocketManager = webSocketManager {
+                    ConnectionStatusView(webSocketManager: webSocketManager)
+                } else {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                        Text("未連接")
+                            .font(.caption)
+                            .foregroundColor(Color.red)
+                    }
+                }
             }
             
             Text("AI 語音助手")
@@ -30,51 +41,27 @@ struct HeaderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
-        .padding(.bottom, 100)
+        .padding(.bottom, 16)
     }
 }
 
 // MARK: - Connection Status View
 struct ConnectionStatusView: View {
-    let webSocketManager: WebSocketManager?
+    @ObservedObject var webSocketManager: WebSocketManager
     
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(connectionStatusColor)
+                .fill(webSocketManager.isConnected ? Color.green : Color.red)
                 .frame(width: 8, height: 8)
-            Text(connectionStatusText)
+            Text(webSocketManager.connectionStatus)
                 .font(.caption)
-                .foregroundColor(connectionStatusColor)
-            if let connectionId = webSocketManager?.connectionId, !connectionId.isEmpty {
-                Text("(\(connectionId))")
+                .foregroundColor(webSocketManager.isConnected ? Color.green : Color.red)
+            if !webSocketManager.connectionId.isEmpty {
+                Text("(\(webSocketManager.connectionId))")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.6))
             }
-        }
-    }
-    
-    private var connectionStatusColor: Color {
-        guard let webSocketManager = webSocketManager else { return .red }
-        
-        // 優先檢查 isConnected 狀態
-        if webSocketManager.isConnected {
-            return .green
-        } else if webSocketManager.connectionStatus.contains("連接中") || 
-                  webSocketManager.connectionStatus.contains("重新連接") {
-            return .orange
-        } else {
-            return .red
-        }
-    }
-    
-    private var connectionStatusText: String {
-        guard let webSocketManager = webSocketManager else { return "未連接" }
-        
-        if webSocketManager.isConnected {
-            return "已連接"
-        } else {
-            return webSocketManager.connectionStatus
         }
     }
 }

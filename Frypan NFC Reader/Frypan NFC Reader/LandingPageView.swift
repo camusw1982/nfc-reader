@@ -28,7 +28,7 @@ struct LandingPageView: View {
     var body: some View {
         ZStack {
             // 背景
-            Color.black
+            Color(red: 0.15, green: 0.15, blue: 0.15)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -86,10 +86,9 @@ struct LandingPageView: View {
         // 啟動脈衝動畫
         voiceManager.startPulseAnimation()
         
-        // 只在未連接時才檢查連接狀態，避免重複連接
-        if webSocketManager?.isConnected != true {
-            webSocketManager?.checkConnectionStatus()
-        }
+        // 不自動檢查連接狀態，讓用戶手動控制
+        // 移除強制重置連接狀態，讓 WebSocket 保持其當前狀態
+        // webSocketManager?.resetConnectionState()
     }
     
     private func cleanup() {
@@ -126,3 +125,4 @@ struct LandingPageView: View {
 #Preview {
     LandingPageView()
 }
+    
