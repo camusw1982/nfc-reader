@@ -122,9 +122,11 @@ struct LandingPageView: View {
         // 自動連接到 WebSocket
         webSocketManager.connect()
         
-        // 獲取當前人物名稱
+        // 只有在人物名稱為空時才獲取當前人物名稱
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            webSocketManager.getCharacterName()
+            if webSocketManager.characterName.isEmpty || webSocketManager.characterName == "AI 語音助手" {
+                webSocketManager.getCharacterName()
+            }
         }
     }
     

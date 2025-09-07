@@ -48,6 +48,7 @@ struct TalkButtonView: View {
                 Image(systemName: speechRecognizer.isRecognizing ? "microphone.badge.ellipsis.fill" : "microphone.fill")
                     .font(.system(size: 50, weight: .regular))
                     .foregroundColor(.white)
+                    .scaleEffect(voiceManager.isPressingTalkButton ? 0.7 : 1.0)
             }
         }
         .simultaneousGesture(

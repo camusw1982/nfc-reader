@@ -80,6 +80,7 @@ struct UserBubbleView: View {
 // MARK: - AI Bubble (Left Side)
 struct AIBubbleView: View {
     let message: ChatMessage
+    @StateObject private var webSocketManager = WebSocketManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -87,7 +88,7 @@ struct AIBubbleView: View {
                 Image(systemName: "brain.head.profile")
                     .font(.caption)
                     .foregroundColor(.blue)
-                Text("Gemini AI")
+                Text(webSocketManager.characterName)
                     .font(.caption)
                     .foregroundColor(.blue)
                 Text(formatTime(message.timestamp))
@@ -158,5 +159,21 @@ struct ChatListView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 100, maxHeight: .infinity)
+        .overlay(
+            // 底部淡出效果
+            VStack {
+                Spacer()
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.clear,
+                        Color.clear
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 60)
+                .allowsHitTesting(false)
+            }
+        )
     }
 }

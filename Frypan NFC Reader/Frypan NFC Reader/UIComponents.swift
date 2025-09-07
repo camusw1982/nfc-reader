@@ -85,21 +85,15 @@ struct BottomToolbarView: View {
             }
             
             Button(action: {
-                let isConnected = webSocketManager.isConnected
-                print("📡 按鈕點擊：當前連接狀態 = \(isConnected), connectionStatus = '\(webSocketManager.connectionStatus)'")
-                
-                if isConnected {
+                if webSocketManager.isConnected {
                     webSocketManager.disconnect()
                 } else {
                     webSocketManager.connect()
                 }
             }) {
-                let isConnected = webSocketManager.isConnected
-                let iconName = isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash"
-                
-                Image(systemName: iconName)
+                Image(systemName: webSocketManager.isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
                     .font(.system(size: 18))
-                    .foregroundColor(isConnected ? Color.green : Color.white.opacity(0.7))
+                    .foregroundColor(webSocketManager.isConnected ? Color.green : Color.white.opacity(0.7))
             }
             
             Button(action: {
