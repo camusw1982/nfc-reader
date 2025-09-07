@@ -34,6 +34,7 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol, We
     @Published var geminiResponse: String = ""
     @Published var connectionId: String = ""
     @Published var currentCharacterId: Int = 1
+    @Published var characterName: String = "AI 語音助手"
     
     // MARK: - Speech Recognizer Reference
     weak var speechRecognizer: SpeechRecognizer?
@@ -208,6 +209,25 @@ extension WebSocketManager {
         sendJSONMessage(historyMessage)
     }
     
+    func getCharacterName(for characterId: Int? = nil) {
+        let targetId = characterId ?? currentCharacterId
+        let characterInfoMessage: [String: Any] = [
+            "type": "get_character_name",
+            "character_id": targetId
+        ]
+        sendJSONMessage(characterInfoMessage)
+    }
+    
+    func updateCharacterName(_ name: String, for characterId: Int? = nil) {
+        DispatchQueue.main.async {
+            let targetId = characterId ?? self.currentCharacterId
+            if targetId == self.currentCharacterId {
+                self.characterName = name
+            }
+            self.logger.info("更新人物 ID \(targetId) 的名稱為: \(name)")
+        }
+    }
+    
     private func sendJSONMessage(_ message: [String: Any]) {
         guard let webSocketTask = webSocketTask else {
             logger.error("WebSocket 未連接")
@@ -319,6 +339,7 @@ extension WebSocketManager {
             }
         case "connection", "connection_ack":
             DispatchQueue.main.async {
+                print("🔗 收到連接確認，設置 isConnected = true")
                 self.isConnected = true
                 self.isConnecting = false
                 self.updateConnectionStatus("已連接")
@@ -329,8 +350,17 @@ extension WebSocketManager {
                     self.lastError = "服務器錯誤: \(errorMessage)"
                 }
             }
+        case "character_name":
+            handleCharacterName(json)
         default:
             break
+        }
+    }
+    
+    private func handleCharacterName(_ json: [String: Any]) {
+        if let characterId = json["character_id"] as? Int,
+           let characterName = json["character_name"] as? String {
+            updateCharacterName(characterName, for: characterId)
         }
     }
     
@@ -420,7 +450,11 @@ extension WebSocketManager {
         DispatchQueue.main.async {
             print("🎭 WebSocketManager 接收到人物 ID 設置: \(characterId)")
             self.currentCharacterId = characterId
+            self.characterName = "AI 語音助手" // 重置為默認名稱
             print("✅ WebSocketManager 已更新當前人物 ID 為: \(self.currentCharacterId)")
+            
+            // 請求新人物的名稱
+            self.getCharacterName(for: characterId)
         }
     }
     

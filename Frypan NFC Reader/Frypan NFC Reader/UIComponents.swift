@@ -41,18 +41,7 @@ struct HeaderView: View {
     }
     
     private func getCharacterName() -> String {
-        let characterId = webSocketManager.currentCharacterId
-        
-        switch characterId {
-        case 1:
-            return "標叔"
-        case 2:
-            return "雷達標"
-        case 3:
-            return "味全師傅"
-        default:
-            return "AI 語音助手"
-        }
+        return webSocketManager.characterName
     }
 }
 
@@ -79,8 +68,13 @@ struct ConnectionStatusView: View {
 
 // MARK: - Bottom Toolbar View
 struct BottomToolbarView: View {
-    let webSocketManager: WebSocketManager?
+    @ObservedObject private var webSocketManager: WebSocketManager
     let onClearChat: () -> Void
+    
+    init(webSocketManager: WebSocketManager?, onClearChat: @escaping () -> Void) {
+        self.webSocketManager = webSocketManager ?? WebSocketManager.shared
+        self.onClearChat = onClearChat
+    }
     
     var body: some View {
         HStack(spacing: 20) {
@@ -91,19 +85,25 @@ struct BottomToolbarView: View {
             }
             
             Button(action: {
-                if webSocketManager?.isConnected == true {
-                    webSocketManager?.disconnect()
+                let isConnected = webSocketManager.isConnected
+                print("📡 按鈕點擊：當前連接狀態 = \(isConnected), connectionStatus = '\(webSocketManager.connectionStatus)'")
+                
+                if isConnected {
+                    webSocketManager.disconnect()
                 } else {
-                    webSocketManager?.connect()
+                    webSocketManager.connect()
                 }
             }) {
-                Image(systemName: webSocketManager?.isConnected == true ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                let isConnected = webSocketManager.isConnected
+                let iconName = isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash"
+                
+                Image(systemName: iconName)
                     .font(.system(size: 18))
-                    .foregroundColor(webSocketManager?.isConnected == true ? Color.green : Color.white.opacity(0.7))
+                    .foregroundColor(isConnected ? Color.green : Color.white.opacity(0.7))
             }
             
             Button(action: {
-                webSocketManager?.clearHistory()
+                webSocketManager.clearHistory()
             }) {
                 Image(systemName: "clock.badge.xmark")
                     .font(.system(size: 18))
@@ -112,12 +112,12 @@ struct BottomToolbarView: View {
             
             Button(action: {
                 // 停止所有音頻播放
-                webSocketManager?.stopAudio()  // 停止 AudioStreamManager 音頻
-                webSocketManager?.stopSpeech() // 停止 MiniMax 語音合成
+                webSocketManager.stopAudio()  // 停止 AudioStreamManager 音頻
+                webSocketManager.stopSpeech() // 停止 MiniMax 語音合成
             }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 18))
-                    .foregroundColor(webSocketManager?.isPlayingAudio == true ? Color.red : Color.white.opacity(0.5))
+                    .foregroundColor(webSocketManager.isPlayingAudio ? Color.red : Color.white.opacity(0.5))
             }
             
             Spacer()

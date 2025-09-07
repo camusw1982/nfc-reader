@@ -121,6 +121,11 @@ struct LandingPageView: View {
         
         // 自動連接到 WebSocket
         webSocketManager.connect()
+        
+        // 獲取當前人物名稱
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            webSocketManager.getCharacterName()
+        }
     }
     
     private func cleanup() {
