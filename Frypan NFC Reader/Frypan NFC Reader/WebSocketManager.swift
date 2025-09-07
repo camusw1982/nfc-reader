@@ -323,6 +323,7 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol {
     private let serverURL: URL
     private var audioPlayer: AVAudioPlayer?
     private var miniMaxWebSocketManager: MiniMaxWebSocketManager?
+    private var isConnecting = false
     
     // MARK: - Initialization
     override init() {
@@ -382,12 +383,21 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol {
 extension WebSocketManager {
     
     func connect() {
-        guard !isConnected else {
-            print("🔌 WebSocket 已經連接")
+        guard !isConnected && !isConnecting else {
+            print("🔌 WebSocket 已經連接或正在連接中")
             return
         }
         
         print("🔌 連接到 WebSocket: \(serverURL)")
+        
+        // 設置連接狀態
+        isConnecting = true
+        
+        // 先斷開現有連接（如果有的話）
+        if webSocketTask != nil {
+            webSocketTask?.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+        }
         
         webSocketTask = URLSession.shared.webSocketTask(with: serverURL)
         webSocketTask?.resume()
@@ -410,6 +420,7 @@ extension WebSocketManager {
         
         DispatchQueue.main.async {
             self.isConnected = false
+            self.isConnecting = false
         }
         
         updateConnectionStatus("已斷開")
@@ -491,6 +502,7 @@ extension WebSocketManager {
                         DispatchQueue.main.async {
                             if !(self?.isConnected ?? false) {
                                 self?.isConnected = true
+                                self?.isConnecting = false
                                 self?.updateConnectionStatus("已連接")
                             }
                         }
@@ -522,6 +534,7 @@ extension WebSocketManager {
                 print("❌ 接收消息失敗: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self?.isConnected = false
+                    self?.isConnecting = false
                     self?.lastError = "連接錯誤: \(error.localizedDescription)"
                 }
             }
@@ -572,11 +585,13 @@ extension WebSocketManager {
         case "pong":
             DispatchQueue.main.async {
                 self.isConnected = true
+                self.isConnecting = false
                 self.updateConnectionStatus("已連接")
             }
         case "connection", "connection_ack":
             DispatchQueue.main.async {
                 self.isConnected = true
+                self.isConnecting = false
                 self.updateConnectionStatus("已連接")
             }
         case "error":
