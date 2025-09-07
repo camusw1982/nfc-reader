@@ -71,7 +71,6 @@ struct ConnectionStatusView: View {
 struct BottomToolbarView: View {
     let webSocketManager: WebSocketManager?
     let onClearChat: () -> Void
-    let onShowMiniMax: () -> Void
     
     var body: some View {
         HStack(spacing: 20) {
@@ -110,12 +109,6 @@ struct BottomToolbarView: View {
                     .font(.system(size: 18))
                     .foregroundColor(webSocketManager?.isPlayingAudio == true ? Color.red : Color.white.opacity(0.5))
             }
-            
-            // Button(action: onShowMiniMax) {
-            //    Image(systemName: "waveform")
-            //        .font(.system(size: 18))
-            //        .foregroundColor(.blue)
-            // }
             
             Spacer()
         }

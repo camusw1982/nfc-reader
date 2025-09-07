@@ -6,6 +6,21 @@
 //
 
 import Foundation
+import os.log
+import Combine
+
+// MARK: - WebSocket Service Protocol
+protocol WebSocketServiceProtocol: ObservableObject {
+    var isConnected: Bool { get }
+    var receivedMessages: [String] { get }
+    
+    func connect()
+    func disconnect()
+    func sendTextToSpeech(text: String, characterId: Int?)
+    func sendPing()
+    func clearHistory()
+    func getHistory()
+}
 
 class WebServiceManager: ObservableObject {
     @Published var isSending = false
@@ -14,30 +29,50 @@ class WebServiceManager: ObservableObject {
     @Published var useWebSocket = true  // 預設使用 WebSocket
     
     // WebSocket 管理器
-    private var webSocketManager: WebSocketManager?
+    private var webSocketManager: (any WebSocketServiceProtocol)?
     
-    // 你的 web server 地址
+    // 配置
     private let serverURL: URL
+    private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "WebService")
+    
+    // MARK: - Initialization
     
     init() {
-        // 安全地創建 URL，如果失敗則使用預設值
-        if let url = URL(string: "http://145.79.12.177:10000/api/speech-result") {
-            self.serverURL = url
-        } else {
-            // 如果 URL 無效，使用一個安全的預設 URL
-            self.serverURL = URL(string: "http://localhost:8080/api/speech-result")!
-        }
+        // 從配置或環境變數獲取服務器地址
+        self.serverURL = Self.createServerURL()
         
         // 初始化 WebSocket 管理器（不自動連接，由 UI 控制）
-        self.webSocketManager = WebSocketManager()
+        // 注意：這裡需要延遲初始化以避免循環依賴
+        self.webSocketManager = nil
+        
+        logger.info("WebServiceManager 初始化完成，服務器地址: \(self.serverURL.absoluteString)")
     }
+    
+    private static func createServerURL() -> URL {
+        // 優先從環境變數或配置檔案讀取
+        if let customURL = ProcessInfo.processInfo.environment["SERVER_URL"],
+           let url = URL(string: customURL) {
+            return url
+        }
+        
+        // 預設地址
+        if let url = URL(string: "http://145.79.12.177:10000/api/speech-result") {
+            return url
+        }
+        
+        // 備用地址
+        return URL(string: "http://localhost:8080/api/speech-result")!
+    }
+    
+    // MARK: - Public Methods
     
     func sendSpeechResult(text: String, completion: @escaping (Bool) -> Void) {
         guard !text.isEmpty else {
-            lastError = "語音識別結果為空"
-            completion(false)
+            handleError("語音識別結果為空", completion: completion)
             return
         }
+        
+        logger.info("開始發送語音識別結果，長度: \(text.count) 字符")
         
         isSending = true
         lastError = nil
@@ -50,17 +85,18 @@ class WebServiceManager: ObservableObject {
         }
     }
     
+    // MARK: - Private Methods
+    
     private func sendViaWebSocket(text: String, completion: @escaping (Bool) -> Void) {
         guard let webSocketManager = webSocketManager else {
-            lastError = "WebSocket 管理器未初始化"
-            completion(false)
+            handleError("WebSocket 管理器未初始化", completion: completion)
             return
         }
         
-        print("📤 通過 WebSocket 發送語音識別結果到 Gemini 語音合成")
+        logger.info("通過 WebSocket 發送語音識別結果到 Gemini 語音合成")
         
         // 直接發送 gemini_chat 請求
-        webSocketManager.sendTextToSpeech(text: text)
+        webSocketManager.sendTextToSpeech(text: text, characterId: nil)
         
         // WebSocket 是異步的，我們假設發送成功
         // 實際應用中可以通過 WebSocket 確認機制來確保發送成功
@@ -71,7 +107,6 @@ class WebServiceManager: ObservableObject {
     }
     
     private func sendViaHTTP(text: String, completion: @escaping (Bool) -> Void) {
-        
         // 創建請求數據，確保使用 UTF-8 編碼
         let requestData: [String: Any] = [
             "text": text,
@@ -80,8 +115,8 @@ class WebServiceManager: ObservableObject {
             "device": "iOS"
         ]
         
-        print("📤 發送原始文本: \(text)")
-        print("📤 文本 UTF8 編碼: \(text.data(using: .utf8)?.base64EncodedString() ?? "無法編碼")")
+        logger.info("發送原始文本: \(text.prefix(50))...")
+        logger.debug("文本 UTF8 編碼: \(text.data(using: .utf8)?.base64EncodedString() ?? "無法編碼")")
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: requestData, options: [])
@@ -93,9 +128,9 @@ class WebServiceManager: ObservableObject {
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Accept")
             request.httpBody = jsonData
             
-            print("📤 JSON 數據大小: \(jsonData.count) bytes")
+            logger.debug("JSON 數據大小: \(jsonData.count) bytes")
             if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print("📤 JSON 字符串: \(jsonString)")
+                logger.debug("JSON 字符串: \(jsonString)")
             }
             
             // 發送請求
@@ -104,25 +139,23 @@ class WebServiceManager: ObservableObject {
                     self?.isSending = false
                     
                     if let error = error {
-                        self?.lastError = "網絡錯誤: \(error.localizedDescription)"
-                        completion(false)
+                        self?.handleError("網絡錯誤: \(error.localizedDescription)", completion: completion)
                         return
                     }
                     
                     if let httpResponse = response as? HTTPURLResponse {
-                        print("🌐 服務器響應狀態: \(httpResponse.statusCode)")
+                        self?.logger.info("服務器響應狀態: \(httpResponse.statusCode)")
                         
                         if httpResponse.statusCode == 200 {
                             // 請求成功
                             if let data = data,
                                let responseString = String(data: data, encoding: .utf8) {
                                 self?.lastResponse = responseString
-                                print("✅ 服務器響應: \(responseString)")
+                                self?.logger.info("服務器響應: \(responseString)")
                             }
                             completion(true)
                         } else {
-                            self?.lastError = "服務器錯誤 (狀態碼: \(httpResponse.statusCode))"
-                            completion(false)
+                            self?.handleError("服務器錯誤 (狀態碼: \(httpResponse.statusCode))", completion: completion)
                         }
                     }
                 }
@@ -131,17 +164,26 @@ class WebServiceManager: ObservableObject {
             task.resume()
             
         } catch {
-            DispatchQueue.main.async {
-                self.isSending = false
-                self.lastError = "數據序列化失敗: \(error.localizedDescription)"
-                completion(false)
-            }
+            handleError("數據序列化失敗: \(error.localizedDescription)", completion: completion)
+        }
+    }
+    
+    private func handleError(_ message: String, completion: @escaping (Bool) -> Void) {
+        DispatchQueue.main.async {
+            self.isSending = false
+            self.lastError = message
+            self.logger.error("\(message)")
+            completion(false)
         }
     }
     
     // MARK: - WebSocket 管理方法
     
-    func getWebSocketManager() -> WebSocketManager? {
+    func setWebSocketManager(_ manager: any WebSocketServiceProtocol) {
+        self.webSocketManager = manager
+    }
+    
+    func getWebSocketManager() -> (any WebSocketServiceProtocol)? {
         return webSocketManager
     }
     
@@ -149,17 +191,17 @@ class WebServiceManager: ObservableObject {
         useWebSocket.toggle()
         if useWebSocket {
             webSocketManager?.connect()
-            print("🔌 切換到 WebSocket 模式")
+            logger.info("切換到 WebSocket 模式")
         } else {
             webSocketManager?.disconnect()
-            print("🌐 切換到 HTTP 模式")
+            logger.info("切換到 HTTP 模式")
         }
     }
     
     func reconnectWebSocket() {
         webSocketManager?.disconnect()
         webSocketManager?.connect()
-        print("🔄 重新連接 WebSocket")
+        logger.info("重新連接 WebSocket")
     }
     
     // MARK: - 服務器功能方法

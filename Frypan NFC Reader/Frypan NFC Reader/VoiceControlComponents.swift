@@ -27,7 +27,7 @@ struct TalkButtonView: View {
                     .fill(Color.clear)
                     .overlay(
                         Circle()
-                            .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                            .stroke(Color.blue.opacity(0.5), lineWidth: 3)
                             .scaleEffect(voiceManager.pulseAnimation ? 1.4 : 1.0)
                             .opacity(voiceManager.pulseAnimation ? 0.2 : 0.8)
                             .animation(
@@ -43,16 +43,12 @@ struct TalkButtonView: View {
                           (voiceManager.slideOffset < -50 ? Color.red : 
                            voiceManager.slideOffset > 50 ? Color.green : Color.orange) : Color.blue)
                     .frame(width: 80, height: 80)
-                    //.shadow(color: voiceManager.isPressingTalkButton ? 
-                    //        (voiceManager.slideOffset < -50 ? Color.red.opacity(0.5) : 
-                    //         voiceManager.slideOffset > 50 ? Color.green.opacity(0.5) : Color.orange.opacity(0.3)) : 
-                    //        Color.blue.opacity(0.3), radius: 0, x: 0, y: 4)
                     .animation(.easeInOut(duration: 0.2), value: voiceManager.slideOffset)
                     .animation(.easeInOut(duration: 0.2), value: voiceManager.isPressingTalkButton)
                 
                 // 麥克風圖標
                 Image(systemName: speechRecognizer.isRecognizing ? "mic.fill" : "mic")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(.system(size: 36, weight: .semibold))
                     .foregroundColor(.white)
             }
         }

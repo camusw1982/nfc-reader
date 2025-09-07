@@ -18,15 +18,12 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     @Published var error: String?
     @Published var lastSentText: String?
     @Published var llmResponse: String = ""
-    @Published var originalText: String = ""
-    @Published var responseTimestamp: Date?
-    @Published var isWebSocketConnected = false
     @Published var isRecordingCancelled = false
     
     // 對話消息數組
-    @Published var messages: [ChatMessage] = []
+    @Published var messages: [Any] = []
     
-    let webService = WebServiceManager()
+    var webService: WebServiceManager?
     
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -41,7 +38,6 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
         super.init()
         setupSpeechRecognizer()
         requestPermission()
-        setupWebSocketMonitoring()
     }
     
     private func setupSpeechRecognizer() {
@@ -166,20 +162,21 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
                 let errorDescription = error.localizedDescription
                 let errorCode = (error as NSError).code
                 
-                // 過濾掉正常情況的錯誤和已知的系統錯誤
-                if errorDescription == "No speech detected" || 
-                   errorDescription == "Recognition request was canceled" ||
-                   errorDescription.contains("kAFAssistantErrorDomain error 216") ||
-                   errorDescription.contains("kAFAssistantErrorDomain Code=1101") ||
-                   errorCode == 1101 {
-                    print("ℹ️ \(errorDescription) (正常情況，已過濾)")
+                // 過濾正常情況的錯誤
+                let normalErrors = [
+                    "No speech detected",
+                    "Recognition request was canceled",
+                    "kAFAssistantErrorDomain error 216",
+                    "kAFAssistantErrorDomain Code=1101"
+                ]
+                
+                if normalErrors.contains(where: { errorDescription.contains($0) }) || errorCode == 1101 {
                     return
                 }
                 
                 // 處理其他錯誤
                 DispatchQueue.main.async {
                     self.error = "識別錯誤: \(errorDescription)"
-                    print("❌ 語音識別錯誤: \(errorDescription) (Code: \(errorCode))")
                 }
             }
         }
@@ -266,8 +263,6 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             self.recognizedText = ""
             self.error = nil
             self.llmResponse = ""
-            self.originalText = ""
-            self.responseTimestamp = nil
             self.isRecordingCancelled = false
             self.messages.removeAll()
         }
@@ -308,16 +303,11 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
         
         if availableLanguages.isEmpty {
             return "❌ 沒有可用的語音識別語言"
-        } else {
-            let currentLang = getCurrentLanguage()
-            let currentLangName = supportedLanguages[currentLang] ?? currentLang
-            return """
-            ✅ 當前語言: \(currentLangName)
-            
-            可用語言:
-            • \(availableLanguages.joined(separator: "\n• "))
-            """
         }
+        
+        let currentLang = getCurrentLanguage()
+        let currentLangName = supportedLanguages[currentLang] ?? currentLang
+        return "✅ 當前語言: \(currentLangName)\n\n可用語言:\n• \(availableLanguages.joined(separator: "\n• "))"
     }
     
     // MARK: - 設備設置檢查
@@ -358,83 +348,22 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
         let languageInfo = checkLanguageSupport()
         
         if issues.isEmpty {
-            return """
-            ✅ 設備設置正常，語音識別功能可用
-            
-            \(languageInfo)
-            """
-        } else {
-            let issueText = issues.joined(separator: "、")
-            let recommendationText = recommendations.joined(separator: "\n• ")
-            
-            return """
-            ⚠️ 設備設置問題：\(issueText)
-            
-            建議解決方案：
-            • \(recommendationText)
-            • 確保設備已連接網絡（使用在線語音識別）
-            • 檢查設備語言設置是否支持粵語
-            
-            \(languageInfo)
-            """
+            return "✅ 設備設置正常，語音識別功能可用\n\n\(languageInfo)"
         }
-    }
-    
-    private func setupWebSocketMonitoring() {
-        // 監聽 WebSocket 連接狀態
-        if let webSocketManager = webService.getWebSocketManager() {
-            webSocketManager.$isConnected.sink { [weak self] isConnected in
-                DispatchQueue.main.async {
-                    self?.isWebSocketConnected = isConnected
-                }
-            }.store(in: &cancellables)
-            
-            // 監聽收到的消息
-            webSocketManager.$receivedMessages.sink { [weak self] messages in
-                guard let self = self, let lastMessage = messages.last else { return }
-                
-                // 解析 Gemini 回應
-                if let data = lastMessage.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                    
-                    if let type = json["type"] as? String {
-                        if type == "response" || type == "gemini_response" {
-                            if let response = json["response"] as? String {
-                                DispatchQueue.main.async {
-                                    self.llmResponse = response
-                                    self.responseTimestamp = Date()
-                                    print("🤖 收到 Gemini 回應: \(response)")
-                                    
-                                    // 添加 AI 回應到對話
-                                    let aiMessage = ChatMessage(text: response, isUser: false, timestamp: Date(), isError: false)
-                                    self.messages.append(aiMessage)
-                                }
-                            }
-                            if let originalText = json["original_text"] as? String {
-                                DispatchQueue.main.async {
-                                    self.originalText = originalText
-                                    print("📝 原始文本: \(originalText)")
-                                }
-                            }
-                        } else if type == "pong" {
-                            print("🏓 服務器響應正常")
-                        } else if type == "history", let history = json["history"] as? [[String: Any]] {
-                            print("📚 收到歷史記錄: \(history.count) 條對話")
-                        }
-                    }
-                } else {
-                    // 如果不是 JSON 格式，直接作為回應處理
-                    DispatchQueue.main.async {
-                        self.llmResponse = lastMessage
-                        print("🤖 收到文本回應: \(lastMessage)")
-                        
-                        // 添加 AI 回應到對話
-                        let aiMessage = ChatMessage(text: lastMessage, isUser: false, timestamp: Date(), isError: false)
-                        self.messages.append(aiMessage)
-                    }
-                }
-            }.store(in: &cancellables)
-        }
+        
+        let issueText = issues.joined(separator: "、")
+        let recommendationText = recommendations.joined(separator: "\n• ")
+        
+        return """
+        ⚠️ 設備設置問題：\(issueText)
+        
+        建議解決方案：
+        • \(recommendationText)
+        • 確保設備已連接網絡（使用在線語音識別）
+        • 檢查設備語言設置是否支持粵語
+        
+        \(languageInfo)
+        """
     }
     
     // MARK: - SFSpeechRecognizerDelegate
