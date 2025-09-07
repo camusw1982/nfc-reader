@@ -93,10 +93,10 @@ class AudioManager: NSObject, AudioManagerProtocol {
     }
     
     func stopAudio() {
-        DispatchQueue.main.async { [weak self] in
-            self?.audioPlayer?.stop()
-            self?.isPlayingAudio = false
-            self?.audioProgress = 0.0
-        }
+        // 直接在主線程執行，避免在釋放過程中使用 weak self
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isPlayingAudio = false
+        audioProgress = 0.0
     }
 }

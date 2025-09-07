@@ -10,39 +10,49 @@ import Foundation
 
 // MARK: - Header View
 struct HeaderView: View {
-    let webSocketManager: WebSocketManager?
+    @ObservedObject private var webSocketManager: WebSocketManager
+    
+    init(webSocketManager: WebSocketManager?) {
+        self.webSocketManager = webSocketManager ?? WebSocketManager.shared
+    }
     
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("影聲")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("影聲")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text(getCharacterName())
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 
                 Spacer()
                 
                 // WebSocket 狀態指示器
-                if let webSocketManager = webSocketManager {
-                    ConnectionStatusView(webSocketManager: webSocketManager)
-                } else {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 8, height: 8)
-                        Text("未連接")
-                            .font(.caption)
-                            .foregroundColor(Color.red)
-                    }
-                }
+                ConnectionStatusView(webSocketManager: webSocketManager)
             }
-            
-            Text("AI 語音助手")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 16)
+    }
+    
+    private func getCharacterName() -> String {
+        let characterId = webSocketManager.currentCharacterId
+        
+        switch characterId {
+        case 1:
+            return "標叔"
+        case 2:
+            return "雷達標"
+        case 3:
+            return "味全師傅"
+        default:
+            return "AI 語音助手"
+        }
     }
 }
 

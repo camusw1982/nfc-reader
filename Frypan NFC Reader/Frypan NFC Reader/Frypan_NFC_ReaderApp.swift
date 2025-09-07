@@ -12,7 +12,7 @@ struct Frypan_NFC_ReaderApp: App {
     
     var body: some Scene {
         WindowGroup {
-            LandingPageView()
+            EntryView()
         }
     }
 }

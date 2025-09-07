@@ -12,6 +12,8 @@ import AVFoundation
 struct TalkButtonView: View {
     @ObservedObject var voiceManager: VoiceControlManager
     @ObservedObject var speechRecognizer: SpeechRecognizer
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseOpacity: Double = 0.6
     let onStartRecording: () -> Void
     let onStopRecording: () -> Void
     let onCancelRecording: () -> Void
@@ -22,33 +24,29 @@ struct TalkButtonView: View {
             // Empty action, using gestures instead
         }) {
             ZStack {
-                // 外圈動畫效果
+                // 外圈脈衝動畫 - 持續顯示以吸引用戶
                 Circle()
-                    .fill(Color.clear)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.blue.opacity(0.5), lineWidth: 3)
-                            .scaleEffect(voiceManager.pulseAnimation ? 1.4 : 1.0)
-                            .opacity(voiceManager.pulseAnimation ? 0.2 : 0.8)
-                            .animation(
-                                Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                                value: voiceManager.pulseAnimation
-                            )
+                    .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                    .scaleEffect(pulseScale)
+                    .opacity(pulseOpacity)
+                    .frame(width: 110, height: 110)
+                    .animation(
+                        .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                        value: pulseScale
                     )
-                    .frame(width: 100, height: 100)
                 
                 // 主按鈕
                 Circle()
                     .fill(voiceManager.isPressingTalkButton ? 
                           (voiceManager.slideOffset < -50 ? Color.red : 
-                           voiceManager.slideOffset > 50 ? Color.green : Color.orange) : Color.blue)
-                    .frame(width: 80, height: 80)
-                    .animation(.easeInOut(duration: 0.2), value: voiceManager.slideOffset)
-                    .animation(.easeInOut(duration: 0.2), value: voiceManager.isPressingTalkButton)
+                            voiceManager.slideOffset > 50 ? Color.green : Color.gray) : Color.blue.opacity(0.6))
+                    .frame(width: 90, height: 90)
+                    .animation(.easeInOut(duration: 0.1), value: voiceManager.slideOffset)
+                    .animation(.easeInOut(duration: 0.1), value: voiceManager.isPressingTalkButton)
                 
                 // 麥克風圖標
-                Image(systemName: speechRecognizer.isRecognizing ? "mic.fill" : "mic")
-                    .font(.system(size: 36, weight: .semibold))
+                Image(systemName: speechRecognizer.isRecognizing ? "microphone.badge.ellipsis.fill" : "microphone.fill")
+                    .font(.system(size: 50, weight: .regular))
                     .foregroundColor(.white)
             }
         }
@@ -61,6 +59,16 @@ struct TalkButtonView: View {
                     handleDragEnded(value)
                 }
         )
+        .onAppear {
+            // 啟動脈衝動畫
+            startPulseAnimation()
+        }
+    }
+    
+    private func startPulseAnimation() {
+        // 設置脈衝動畫目標值
+        pulseScale = 1.3
+        pulseOpacity = 0.2
     }
     
     private func handleDragChanged(_ value: DragGesture.Value) {
@@ -156,14 +164,14 @@ struct SlideControlsView: View {
     
     var body: some View {
         if voiceManager.showSlideControls {
-            HStack(spacing: 80) {
+            HStack(spacing: 110) {
                 // 取消按鈕
                 Circle()
                     .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(0.8) : Color.red.opacity(0.3))
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "xmark")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: 33, weight: .bold))
                             .foregroundColor(.white)
                             .scaleEffect(voiceManager.slideOffset < -50 ? 1.2 : 1.0)
                     )
@@ -175,7 +183,7 @@ struct SlideControlsView: View {
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "checkmark")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: 33, weight: .bold))
                             .foregroundColor(.white)
                             .scaleEffect(voiceManager.slideOffset > 50 ? 1.2 : 1.0)
                     )

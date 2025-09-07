@@ -17,7 +17,6 @@ class VoiceControlManager: ObservableObject {
     @Published var showSlideControls = false
     @Published var isRecordingConfirmed = false
     @Published var currentSlideAction: SlideAction? = nil
-    @Published var pulseAnimation: Bool = false
     @Published var isInitialized = false
     
     // 滑動操作枚舉
@@ -60,14 +59,6 @@ class VoiceControlManager: ObservableObject {
             // 清空識別文本
             speechRecognizer.recognizedText = ""
             print("🔄 錄音狀態已完全重置，包括識別文本")
-        }
-    }
-    
-    func startPulseAnimation() {
-        withAnimation(
-            Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)
-        ) {
-            pulseAnimation = true
         }
     }
     

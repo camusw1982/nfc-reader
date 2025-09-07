@@ -15,23 +15,50 @@ struct LandingPageView: View {
     @StateObject private var speechRecognizer = SpeechRecognizer()
     @StateObject private var voiceManager = VoiceControlManager()
     @StateObject private var webServiceManager = WebServiceManager()
-    @StateObject private var webSocketManagerInstance = WebSocketManager()
     @State private var showSpeechPermissionAlert = false
     
-    init() {
-        // 設置服務管理器之間的關聯將在 onAppear 中進行
-    }
-    
-    // 獲取 WebSocketManager 實例
-    private var webSocketManager: WebSocketManager? {
-        return webSocketManagerInstance
+    // 使用共享的 WebSocketManager 實例，避免重複創建
+    private var webSocketManager: WebSocketManager {
+        return WebSocketManager.shared
     }
     
     var body: some View {
         ZStack {
             // 背景
-            Color(red: 0.15, green: 0.15, blue: 0.15)
+            Color(red: 0.08, green: 0.08, blue: 0.08)
                 .ignoresSafeArea()
+            
+            // 背景橢圓形顏色塊與漸變效果
+            Ellipse()
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            Gradient.Stop(color: Color(red: 0.12, green: 0.24, blue: 0.59), location: 0.00),
+                            Gradient.Stop(color: .black.opacity(0), location: 1.00),
+                        ],
+                        startPoint: UnitPoint(x: 0.5, y: 0),
+                        endPoint: UnitPoint(x: 0.5, y: 0.76)
+                    )
+                )
+                .frame(width: 340, height: 448)
+                .offset(x: -60, y: -200) // 設置具體的 x, y 位置
+                .blur(radius: 100)
+            
+            Ellipse()
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            Gradient.Stop(color: Color(red: 0.41, green: 0.28, blue: 0.07), location: 0.00),
+                            Gradient.Stop(color: .black.opacity(0), location: 1.00),
+                        ],
+                        startPoint: UnitPoint(x: 0.5, y: 0),
+                        endPoint: UnitPoint(x: 0.5, y: 0.76)
+                    )
+                )
+                .frame(width: 340, height: 448)
+                .offset(x: 150, y: 150) // 設置具體的 x, y 位置
+                .blur(radius: 100)
+                
             
             VStack(spacing: 0) {
                 // 頂部標題欄
@@ -83,28 +110,23 @@ struct LandingPageView: View {
     
     private func initializeView() {
         // 設置服務管理器之間的關聯
-        webServiceManager.setWebSocketManager(webSocketManagerInstance)
+        webServiceManager.setWebSocketManager(webSocketManager)
         speechRecognizer.webService = webServiceManager
         
         // 設置 WebSocketManager 的 speechRecognizer 引用
-        webSocketManagerInstance.speechRecognizer = speechRecognizer
+        webSocketManager.speechRecognizer = speechRecognizer
         
         // 初始化語音控制功能
         voiceManager.initialize()
         
-        // 啟動脈衝動畫
-        voiceManager.startPulseAnimation()
-        
         // 自動連接到 WebSocket
-        if let webSocketManager = webSocketManager {
-            webSocketManager.connect()
-        }
+        webSocketManager.connect()
     }
     
     private func cleanup() {
         // 停止語音識別和斷開 WebSocket
         speechRecognizer.stopRecording()
-        webSocketManager?.disconnect()
+        webSocketManager.disconnect()
     }
     
     private func startSpeechRecognition() {

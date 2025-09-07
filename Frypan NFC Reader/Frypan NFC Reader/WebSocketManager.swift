@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import os.log
+import AVFoundation
 
 // MARK: - WebSocket Manager Protocol
 protocol WebSocketManagerProtocol: ObservableObject {
@@ -19,6 +20,9 @@ protocol WebSocketManagerProtocol: ObservableObject {
 
 // MARK: - WebSocket Manager
 class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol, WebSocketServiceProtocol, MiniMaxWebSocketManagerDelegate {
+    
+    // MARK: - Shared Instance
+    static let shared = WebSocketManager()
     
     // MARK: - Published Properties
     @Published var isConnected = false
@@ -37,7 +41,7 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol, We
     // MARK: - Private Properties
     private var webSocketTask: URLSessionWebSocketTask?
     private let serverURL: URL
-    private var audioManager: AudioManager
+    private let audioManager: AudioManager
     private var miniMaxWebSocketManager: MiniMaxWebSocketManager?
     private var isConnecting = false
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "WebSocket")
@@ -136,6 +140,9 @@ extension WebSocketManager {
     }
     
     func disconnect() {
+        // 先停止音頻播放，避免在釋放過程中調用
+        audioManager.stopAudio()
+        
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         
@@ -148,9 +155,6 @@ extension WebSocketManager {
         }
         
         updateConnectionStatus("已斷開")
-        
-        // 停止音頻播放
-        audioManager.stopAudio()
     }
     
     private func updateConnectionStatus(_ status: String) {
@@ -170,6 +174,7 @@ extension WebSocketManager {
             "text": text,
             "character_id": characterIdToUse
         ]
+        print("📤 發送文本消息，使用人物 ID: \(characterIdToUse)")
         sendJSONMessage(message)
         logger.info("發送文本: \(text)")
     }
@@ -183,6 +188,7 @@ extension WebSocketManager {
             "streaming": true
         ]
         
+        print("🎤 發送語音合成請求，使用人物 ID: \(characterIdToUse)")
         sendJSONMessage(message)
         logger.info("發送語音合成請求: \(text)")
     }
@@ -412,7 +418,9 @@ extension WebSocketManager {
     
     func setCharacterId(_ characterId: Int) {
         DispatchQueue.main.async {
+            print("🎭 WebSocketManager 接收到人物 ID 設置: \(characterId)")
             self.currentCharacterId = characterId
+            print("✅ WebSocketManager 已更新當前人物 ID 為: \(self.currentCharacterId)")
         }
     }
     
