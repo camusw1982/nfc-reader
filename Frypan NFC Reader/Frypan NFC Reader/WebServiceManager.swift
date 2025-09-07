@@ -28,9 +28,10 @@ class WebServiceManager: ObservableObject {
             self.serverURL = URL(string: "http://localhost:8080/api/speech-result")!
         }
         
-        // 初始化 WebSocket 管理器，但不自動連接
+        // 初始化 WebSocket 管理器並自動連接
         self.webSocketManager = WebSocketManager()
-        // 移除自動連接，讓用戶手動控制連接
+        // 應用啟動時自動連接 WebSocket
+        self.webSocketManager?.connect()
     }
     
     func sendSpeechResult(text: String, completion: @escaping (Bool) -> Void) {
@@ -60,7 +61,7 @@ class WebServiceManager: ObservableObject {
         
         print("📤 通過 WebSocket 發送語音識別結果到 Gemini 語音合成")
         
-        // 直接發送 gemini_to_speech 請求
+        // 直接發送 gemini_chat 請求
         webSocketManager.sendTextToSpeech(text: text)
         
         // WebSocket 是異步的，我們假設發送成功

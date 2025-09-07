@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 // MARK: - Header View
 struct HeaderView: View {
@@ -70,6 +71,7 @@ struct ConnectionStatusView: View {
 struct BottomToolbarView: View {
     let webSocketManager: WebSocketManager?
     let onClearChat: () -> Void
+    let onShowMiniMax: () -> Void
     
     var body: some View {
         HStack(spacing: 20) {
@@ -94,23 +96,31 @@ struct BottomToolbarView: View {
             Button(action: {
                 webSocketManager?.clearHistory()
             }) {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: "clock.badge.xmark")
                     .font(.system(size: 18))
                     .foregroundColor(.white.opacity(0.7))
             }
             
             Button(action: {
-                webSocketManager?.stopAudio()
+                // 停止所有音頻播放
+                webSocketManager?.stopAudio()  // 停止 AudioStreamManager 音頻
+                webSocketManager?.stopSpeech() // 停止 MiniMax 語音合成
             }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 18))
                     .foregroundColor(webSocketManager?.isPlayingAudio == true ? Color.red : Color.white.opacity(0.5))
             }
             
+            // Button(action: onShowMiniMax) {
+            //    Image(systemName: "waveform")
+            //        .font(.system(size: 18))
+            //        .foregroundColor(.blue)
+            // }
+            
             Spacer()
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 30)
+        .padding(.bottom, 20)
     }
 }
 

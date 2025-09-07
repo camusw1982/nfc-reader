@@ -43,10 +43,10 @@ struct TalkButtonView: View {
                           (voiceManager.slideOffset < -50 ? Color.red : 
                            voiceManager.slideOffset > 50 ? Color.green : Color.orange) : Color.blue)
                     .frame(width: 80, height: 80)
-                    .shadow(color: voiceManager.isPressingTalkButton ? 
-                            (voiceManager.slideOffset < -50 ? Color.red.opacity(0.5) : 
-                             voiceManager.slideOffset > 50 ? Color.green.opacity(0.5) : Color.orange.opacity(0.3)) : 
-                            Color.blue.opacity(0.3), radius: 0, x: 0, y: 4)
+                    //.shadow(color: voiceManager.isPressingTalkButton ? 
+                    //        (voiceManager.slideOffset < -50 ? Color.red.opacity(0.5) : 
+                    //         voiceManager.slideOffset > 50 ? Color.green.opacity(0.5) : Color.orange.opacity(0.3)) : 
+                    //        Color.blue.opacity(0.3), radius: 0, x: 0, y: 4)
                     .animation(.easeInOut(duration: 0.2), value: voiceManager.slideOffset)
                     .animation(.easeInOut(duration: 0.2), value: voiceManager.isPressingTalkButton)
                 

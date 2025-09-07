@@ -32,7 +32,9 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    #if os(iOS)
     private let audioSession = AVAudioSession.sharedInstance()
+    #endif
     private var cancellables = Set<AnyCancellable>()
     
     override init() {
@@ -106,13 +108,20 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             return
         }
         
-        // 取消之前的任務
+        // 徹底清理之前的任務
         if let recognitionTask = recognitionTask {
             recognitionTask.cancel()
             self.recognitionTask = nil
         }
         
+        // 清理之前的請求
+        if let recognitionRequest = recognitionRequest {
+            recognitionRequest.endAudio()
+            self.recognitionRequest = nil
+        }
+        
         // 配置音頻會話
+        #if os(iOS)
         do {
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try audioSession.setActive(true)
@@ -120,6 +129,7 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             self.error = "音頻會話配置失敗: \(error.localizedDescription)"
             return
         }
+        #endif
         
         // 創建識別請求
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -130,8 +140,13 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
         
         recognitionRequest.shouldReportPartialResults = true
         
-        // 簡化：只使用在線識別，避免離線識別的 1101 錯誤
+        // 強制使用在線識別，避免離線識別的 1101 錯誤
         recognitionRequest.requiresOnDeviceRecognition = false
+        
+        // 額外設置：確保使用在線識別
+        if #available(iOS 13.0, *) {
+            recognitionRequest.addsPunctuation = true
+        }
         
         // 開始識別任務
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
@@ -149,17 +164,22 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             
             if let error = error {
                 let errorDescription = error.localizedDescription
+                let errorCode = (error as NSError).code
                 
-                // 過濾掉正常情況的錯誤
+                // 過濾掉正常情況的錯誤和已知的系統錯誤
                 if errorDescription == "No speech detected" || 
                    errorDescription == "Recognition request was canceled" ||
-                   errorDescription.contains("kAFAssistantErrorDomain error 216") {
-                    print("ℹ️ \(errorDescription) (正常情況)")
-                } else {
-                    DispatchQueue.main.async {
-                        self.error = "識別錯誤: \(errorDescription)"
-                        print("❌ 語音識別錯誤: \(errorDescription)")
-                    }
+                   errorDescription.contains("kAFAssistantErrorDomain error 216") ||
+                   errorDescription.contains("kAFAssistantErrorDomain Code=1101") ||
+                   errorCode == 1101 {
+                    print("ℹ️ \(errorDescription) (正常情況，已過濾)")
+                    return
+                }
+                
+                // 處理其他錯誤
+                DispatchQueue.main.async {
+                    self.error = "識別錯誤: \(errorDescription)"
+                    print("❌ 語音識別錯誤: \(errorDescription) (Code: \(errorCode))")
                 }
             }
         }
@@ -212,11 +232,13 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             recognitionTask = nil
             
             // 停用音頻會話
+            #if os(iOS)
             do {
                 try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
             } catch {
                 print("⚠️ 停用音頻會話失敗: \(error.localizedDescription)")
             }
+            #endif
             
             DispatchQueue.main.async {
                 self.isRecognizing = false
@@ -364,7 +386,6 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             webSocketManager.$isConnected.sink { [weak self] isConnected in
                 DispatchQueue.main.async {
                     self?.isWebSocketConnected = isConnected
-                    print("🔌 WebSocket 連接狀態: \(isConnected)")
                 }
             }.store(in: &cancellables)
             
