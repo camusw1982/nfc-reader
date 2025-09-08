@@ -33,7 +33,7 @@ class MiniMaxWebSocketManager: NSObject {
     }
     
     // MARK: - Public Methods
-    func textToSpeech(_ text: String, voiceId: String = "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430") {
+    func textToSpeech(_ text: String, voiceId: String = "NONE") {
         guard !isProcessing else { 
             logger.warning("MiniMax 正在處理其他請求")
             return 
@@ -184,7 +184,7 @@ class MiniMaxWebSocketManager: NSObject {
     private func sendTaskStart(voiceId: String) {
         let message: [String: Any] = [
             "event": "task_start",
-            "model": "speech-02-turbo",
+            "model": "speech-02-hd",
             "language_boost": "Chinese,Yue",
             "voice_setting": [
                 "voice_id": voiceId,

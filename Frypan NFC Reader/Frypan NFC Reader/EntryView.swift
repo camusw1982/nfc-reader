@@ -25,34 +25,54 @@ struct EntryView: View {
                         .foregroundColor(.white)
                         .padding(.top, 60)
                     
-                    // 人物選擇區域
-                    HStack(spacing: 30) {
-                        // 人物1
-                        CharacterCircle(
-                            name: "人物1",
-                            character_id: 1,
-                            selectedCharacter: $selectedCharacter
-                        )
+                    // 人物選擇區域 (2x2 網格)
+                    VStack(spacing: 30) {
+                        HStack(spacing: 40) {
+                            // 人物1
+                            CharacterCircle(
+                                name: "董標",
+                                character_id: 1,
+                                selectedCharacter: $selectedCharacter
+                            )
+                    // 人物2
+                            CharacterCircle(
+                                name: "雷達標(富貴迫人)", 
+                                character_id: 2,
+                                selectedCharacter: $selectedCharacter
+                            )
+                        }
                         
-                        // 人物2
-                        CharacterCircle(
-                            name: "人物2", 
-                            character_id: 2,
-                            selectedCharacter: $selectedCharacter
-                        )
+                        HStack(spacing: 40) {
+                            // 人物3
+                            CharacterCircle(
+                                name: "陳味全(虛構)",
+                                character_id: 3,
+                                selectedCharacter: $selectedCharacter
+                            )
                         
-                        // 人物3
-                        CharacterCircle(
-                            name: "人物3",
-                            character_id: 3,
-                            selectedCharacter: $selectedCharacter
-                        )
-                        
-                        CharacterCircle(
-                            name: "人物4",
-                            character_id: 4,
-                            selectedCharacter: $selectedCharacter
-                        )
+                            // 人物4
+                            CharacterCircle(
+                                name: "黃霑",
+                                character_id: 4,
+                                selectedCharacter: $selectedCharacter
+                            )
+                        }
+
+                        HStack(spacing: 40) {
+                            // 人物5
+                            CharacterCircle(
+                                name: "Elsa女王",
+                                character_id: 5,
+                                selectedCharacter: $selectedCharacter
+                            )
+
+                            // 人物6
+                            CharacterCircle(
+                                name: "琪琪(女兒)",
+                                character_id: 6,
+                                selectedCharacter: $selectedCharacter
+                            )
+                        }
                     }
                     .padding(.horizontal, 20)
                     

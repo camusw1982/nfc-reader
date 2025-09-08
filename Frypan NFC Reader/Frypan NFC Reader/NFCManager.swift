@@ -54,6 +54,24 @@ class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCND
         }
     }
     
+    // MARK: - 重置方法
+    
+    func reset() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 停止任何正在進行的會話
+            self.nfcSession?.invalidate()
+            self.nfcSession = nil
+            
+            // 重置所有狀態
+            self.isReading = false
+            self.message = "準備讀取 NFC 標籤"
+            self.detectedTag = nil
+            self.nfcTextContent = ""
+        }
+    }
+    
     // MARK: - NFCTagReaderSessionDelegate
     
     func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {

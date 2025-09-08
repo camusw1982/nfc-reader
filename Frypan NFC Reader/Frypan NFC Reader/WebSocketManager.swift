@@ -10,6 +10,11 @@ import Combine
 import os.log
 import AVFoundation
 
+// MARK: - Notification Names
+extension Notification.Name {
+    static let WebSocketConnectionChanged = Notification.Name("WebSocketConnectionChanged")
+}
+
 // MARK: - WebSocket Manager
 class WebSocketManager: NSObject, ObservableObject, WebSocketServiceProtocol, MiniMaxWebSocketManagerDelegate {
     
@@ -139,9 +144,19 @@ extension WebSocketManager {
     
     private func setConnected(_ connected: Bool) {
         DispatchQueue.main.async {
+            let previousState = self.isConnected
             self.isConnected = connected
             self.isConnecting = false
             self.updateConnectionStatus(connected ? "已連接" : "已斷開")
+            
+            // 只有在狀態改變時才發送通知
+            if previousState != connected {
+                NotificationCenter.default.post(
+                    name: .WebSocketConnectionChanged,
+                    object: connected
+                )
+                self.logger.info("🔌 WebSocket 連接狀態變更: \(connected)，已發送通知")
+            }
         }
     }
 }

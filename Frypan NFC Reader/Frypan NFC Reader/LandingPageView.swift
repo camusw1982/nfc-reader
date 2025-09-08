@@ -16,6 +16,7 @@ struct LandingPageView: View {
     @StateObject private var voiceManager = VoiceControlManager()
     @StateObject private var webServiceManager = WebServiceManager()
     @State private var showSpeechPermissionAlert = false
+    @Environment(\.dismiss) private var dismiss
     
     // 使用共享的 WebSocketManager 實例，避免重複創建
     private var webSocketManager: WebSocketManager {
@@ -105,6 +106,28 @@ struct LandingPageView: View {
                         onClearChat: { speechRecognizer.clearChat() }
                     )
                 }
+                
+                // 右下角返回按鈕
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            goBackToNFCReader()
+                        }) {
+                            Image(systemName: "arrow.backward.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.blue.opacity(0.8))
+                                .background(
+                                    Circle()
+                                        .fill(Color.white.opacity(0.1))
+                                        .frame(width: 40, height: 40)
+                                )
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
             }
         }
         .speechPermissionAlert(isPresented: $showSpeechPermissionAlert)
@@ -172,6 +195,14 @@ struct LandingPageView: View {
     
     private func stopSpeech() {
         webSocketManager.stopAudio()
+    }
+    
+    private func goBackToNFCReader() {
+        // 清理當前狀態
+        cleanup()
+        
+        // 返回到 NFCReaderView
+        dismiss()
     }
 }
 
