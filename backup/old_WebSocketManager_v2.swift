@@ -10,8 +10,16 @@ import Combine
 import os.log
 import AVFoundation
 
+// MARK: - WebSocket Manager Protocol
+protocol WebSocketManagerProtocol: ObservableObject {
+    var isConnected: Bool { get }
+    var connectionStatus: String { get }
+    var connectionId: String { get }
+    var isPlayingAudio: Bool { get }
+}
+
 // MARK: - WebSocket Manager
-class WebSocketManager: NSObject, ObservableObject, WebSocketServiceProtocol, MiniMaxWebSocketManagerDelegate {
+class WebSocketManager: NSObject, ObservableObject, WebSocketManagerProtocol, WebSocketServiceProtocol, MiniMaxWebSocketManagerDelegate {
     
     // MARK: - Shared Instance
     static let shared = WebSocketManager()
@@ -61,11 +69,19 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketServiceProtocol, Mi
     
     // MARK: - Setup Methods
     private static func createServerURL() -> URL {
+        // 優先從環境變數或配置檔案讀取
         if let customURL = ProcessInfo.processInfo.environment["WEBSOCKET_URL"],
            let url = URL(string: customURL) {
             return url
         }
-        return URL(string: "ws://145.79.12.177:10000")!
+        
+        // 預設地址
+        if let url = URL(string: "ws://145.79.12.177:10000") {
+            return url
+        }
+        
+        // 備用地址
+        return URL(string: "ws://localhost:8080")!
     }
     
     private func setupAudioBinding() {
@@ -130,18 +146,17 @@ extension WebSocketManager {
         // 斷開 MiniMax WebSocket 連接
         miniMaxWebSocketManager?.disconnect()
         
-        setConnected(false)
+        DispatchQueue.main.async {
+            self.isConnected = false
+            self.isConnecting = false
+        }
+        
+        updateConnectionStatus("已斷開")
     }
     
     private func updateConnectionStatus(_ status: String) {
-        connectionStatus = status
-    }
-    
-    private func setConnected(_ connected: Bool) {
         DispatchQueue.main.async {
-            self.isConnected = connected
-            self.isConnecting = false
-            self.updateConnectionStatus(connected ? "已連接" : "已斷開")
+            self.connectionStatus = status
         }
     }
 }
@@ -229,7 +244,13 @@ extension WebSocketManager {
                             self?.isConnected = false
                         }
                     } else {
-                        self?.setConnected(true)
+                        DispatchQueue.main.async {
+                            if !(self?.isConnected ?? false) {
+                                self?.isConnected = true
+                                self?.isConnecting = false
+                                self?.updateConnectionStatus("已連接")
+                            }
+                        }
                     }
                 }
             }
@@ -256,8 +277,9 @@ extension WebSocketManager {
                 
             case .failure(let error):
                 self?.logger.error("接收消息失敗: \(error.localizedDescription)")
-                self?.setConnected(false)
                 DispatchQueue.main.async {
+                    self?.isConnected = false
+                    self?.isConnecting = false
                     self?.lastError = "連接錯誤: \(error.localizedDescription)"
                 }
             }
@@ -288,6 +310,7 @@ extension WebSocketManager {
         
         logger.info("收到消息: \(text.prefix(100))...")
         
+        // 解析 JSON 消息
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
@@ -304,8 +327,19 @@ extension WebSocketManager {
             handleGeminiResponse(json)
         case "audio_chunk", "minimax_audio_chunk":
             handleAudioChunk(json)
-        case "pong", "connection", "connection_ack":
-            setConnected(true)
+        case "pong":
+            DispatchQueue.main.async {
+                self.isConnected = true
+                self.isConnecting = false
+                self.updateConnectionStatus("已連接")
+            }
+        case "connection", "connection_ack":
+            DispatchQueue.main.async {
+                print("🔗 收到連接確認，設置 isConnected = true")
+                self.isConnected = true
+                self.isConnecting = false
+                self.updateConnectionStatus("已連接")
+            }
         case "error":
             if let errorMessage = json["message"] as? String {
                 DispatchQueue.main.async {

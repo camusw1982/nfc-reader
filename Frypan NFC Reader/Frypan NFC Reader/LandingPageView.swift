@@ -60,41 +60,51 @@ struct LandingPageView: View {
                 .blur(radius: 100)
                 
             
-            VStack(spacing: 0) {
-                // 頂部標題欄
-                HeaderView(webSocketManager: webSocketManager)
+            ZStack {
+                // 主要內容區域 - 佔滿整個屏幕
+                VStack(spacing: 0) {
+                    // 頂部標題欄
+                    HeaderView(webSocketManager: webSocketManager)
+                    
+                    // 對話區域 - 佔滿剩餘空間
+                    ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
+                }
                 
-                // 對話區域
-                ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
-                
-                // 語音識別狀態顯示
-                SpeechRecognitionStatusView(
-                    speechRecognizer: speechRecognizer,
-                    voiceManager: voiceManager
-                )
-                
-                // 錯誤信息
-                ErrorMessageView(error: speechRecognizer.error)
-                
-                // 滑動控制區域
-                SlideControlsView(voiceManager: voiceManager)
-                
-                // Talk 按鈕
-                TalkButtonView(
-                    voiceManager: voiceManager,
-                    speechRecognizer: speechRecognizer,
-                    onStartRecording: startSpeechRecognition,
-                    onStopRecording: stopSpeechRecognition,
-                    onCancelRecording: cancelRecording,
-                    onConfirmRecording: confirmRecording
-                )
-                .padding(.bottom, 20)
-                
-                // 底部工具欄
-                BottomToolbarView(
-                    webSocketManager: webSocketManager,
-                    onClearChat: { speechRecognizer.clearChat() }
-                )
+                // 底部覆蓋層 - 包含語音控制元素
+                VStack {
+                    Spacer()
+                    
+                    // 語音識別狀態顯示
+                    SpeechRecognitionStatusView(
+                        speechRecognizer: speechRecognizer,
+                        voiceManager: voiceManager
+                    )
+                    
+                    // 錯誤信息
+                    ErrorMessageView(error: speechRecognizer.error)
+                    
+                    // 滑動控制區域
+                    SlideControlsView(voiceManager: voiceManager)
+                    
+                    // Talk 按鈕
+                    TalkButtonView(
+                        voiceManager: voiceManager,
+                        speechRecognizer: speechRecognizer,
+                        onStartRecording: startSpeechRecognition,
+                        onStopRecording: stopSpeechRecognition,
+                        onCancelRecording: cancelRecording,
+                        onConfirmRecording: confirmRecording,
+                        onStopSpeech: stopSpeech
+                    )
+                    .padding(.horizontal, 100)
+                    .padding(.vertical, 0)
+                    
+                    // 底部工具欄
+                    BottomToolbarView(
+                        webSocketManager: webSocketManager,
+                        onClearChat: { speechRecognizer.clearChat() }
+                    )
+                }
             }
         }
         .speechPermissionAlert(isPresented: $showSpeechPermissionAlert)
@@ -158,6 +168,10 @@ struct LandingPageView: View {
             speechRecognizer: speechRecognizer,
             webSocketManager: webSocketManager
         )
+    }
+    
+    private func stopSpeech() {
+        webSocketManager.stopAudio()
     }
 }
 

@@ -157,23 +157,8 @@ struct ChatListView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 100, maxHeight: .infinity)
-        .overlay(
-            // 底部淡出效果
-            VStack {
-                Spacer()
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.clear,
-                        Color.clear
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 60)
-                .allowsHitTesting(false)
-            }
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 140) // 為底部按鈕留出空間
+        .clipped() // 確保內容不會洩漏到 padding 區域
     }
 }

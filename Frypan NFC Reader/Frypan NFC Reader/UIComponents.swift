@@ -37,7 +37,7 @@ struct HeaderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
-        .padding(.bottom, 16)
+        .padding(.bottom, 10)
     }
     
     private func getCharacterName() -> String {
@@ -57,11 +57,11 @@ struct ConnectionStatusView: View {
             Text(webSocketManager.connectionStatus)
                 .font(.caption)
                 .foregroundColor(webSocketManager.isConnected ? Color.green : Color.red)
-            if !webSocketManager.connectionId.isEmpty {
-                Text("(\(webSocketManager.connectionId))")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.6))
-            }
+            //if !webSocketManager.connectionId.isEmpty {
+            //    Text("(\(webSocketManager.connectionId))")
+            //        .font(.caption2)
+            //        .foregroundColor(.white.opacity(0.6))
+            //}
         }
     }
 }
@@ -106,8 +106,7 @@ struct BottomToolbarView: View {
             
             Button(action: {
                 // 停止所有音頻播放
-                webSocketManager.stopAudio()  // 停止 AudioStreamManager 音頻
-                webSocketManager.stopSpeech() // 停止 MiniMax 語音合成
+                webSocketManager.stopAudio()  // 停止所有音頻播放
             }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 18))
@@ -117,7 +116,7 @@ struct BottomToolbarView: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 20)
+        .padding(.bottom, 10)
     }
 }
 
@@ -130,7 +129,7 @@ struct ErrorMessageView: View {
             Text(error)
                 .font(.caption)
                 .foregroundColor(.red)
-                .padding(.bottom, 8)
+                .padding(.bottom, 10)
         }
     }
 }

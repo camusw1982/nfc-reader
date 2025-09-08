@@ -19,9 +19,7 @@ class MiniMaxWebSocketManager: NSObject {
     // MARK: - Properties
     private var webSocketTask: URLSessionWebSocketTask?
     private var audioChunks: [String] = []
-    private var isProcessingRequest = false
-    private var isConnected = false
-    private var isConnecting = false
+    private var isProcessing = false
     private let apiKey: String
     private let baseURL = "wss://api.minimax.io/ws/v1/t2a_v2"
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "MiniMax")
@@ -36,19 +34,15 @@ class MiniMaxWebSocketManager: NSObject {
     
     // MARK: - Public Methods
     func textToSpeech(_ text: String) {
-        guard !isProcessingRequest else { 
-            logger.warning("MiniMax 正在處理其他請求，請稍後再試")
+        guard !isProcessing else { 
+            logger.warning("MiniMax 正在處理其他請求")
             return 
         }
         
-        // 每次語音合成都需要建立新的連接
         logger.info("開始語音合成: \(text.prefix(50))...")
-        DispatchQueue.main.async {
-            self.isProcessingRequest = true
-        }
+        isProcessing = true
         audioChunks.removeAll()
         
-        // 建立新連接並處理語音合成
         connectAndProcessText(text)
     }
     
@@ -56,11 +50,11 @@ class MiniMaxWebSocketManager: NSObject {
         logger.info("斷開 MiniMax WebSocket 連接")
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
-        DispatchQueue.main.async {
-            self.isConnected = false
-            self.isConnecting = false
-            self.isProcessingRequest = false
-        }
+        resetState()
+    }
+    
+    private func resetState() {
+        isProcessing = false
         audioChunks.removeAll()
     }
     
@@ -68,15 +62,11 @@ class MiniMaxWebSocketManager: NSObject {
     private func connectAndProcessText(_ text: String) {
         guard let url = URL(string: baseURL) else { 
             logger.error("無效的 MiniMax WebSocket URL")
-            DispatchQueue.main.async {
-                self.isProcessingRequest = false
-            }
+            resetState()
             return 
         }
         
-        DispatchQueue.main.async {
-            self.isConnecting = true
-        }
+        // isConnecting = true // 簡化狀態管理
         logger.info("正在建立 MiniMax WebSocket 連接...")
         
         var request = URLRequest(url: url)
@@ -109,12 +99,7 @@ class MiniMaxWebSocketManager: NSObject {
                 self?.receiveMessage()
             case .failure(let error):
                 self?.logger.error("MiniMax WebSocket 錯誤: \(error.localizedDescription)")
-                // 連接錯誤時重置狀態
-                DispatchQueue.main.async {
-                    self?.isConnected = false
-                    self?.isConnecting = false
-                    self?.isProcessingRequest = false
-                }
+                self?.resetState()
             }
         }
     }
@@ -140,10 +125,6 @@ class MiniMaxWebSocketManager: NSObject {
         switch event {
         case "connected_success":
             logger.info("MiniMax 連接成功")
-            DispatchQueue.main.async {
-                self.isConnected = true
-                self.isConnecting = false
-            }
             
         case "task_started":
             logger.info("MiniMax 任務開始")
@@ -165,23 +146,17 @@ class MiniMaxWebSocketManager: NSObject {
             
         case "task_finished":
             logger.info("MiniMax 任務完成")
-            DispatchQueue.main.async {
-                self.isProcessingRequest = false
-            }
-            // 任務完成後斷開連接（按照 MiniMax API 規範）
+            resetState()
             disconnect()
             
         case "task_failed":
             logger.error("MiniMax 任務失敗")
-            DispatchQueue.main.async {
-                self.isProcessingRequest = false
-            }
             if let baseResp = json["base_resp"] as? [String: Any],
                let statusCode = baseResp["status_code"] as? Int,
                let statusMsg = baseResp["status_msg"] as? String {
                 logger.error("MiniMax API 錯誤: \(statusCode) - \(statusMsg)")
             }
-            // 任務失敗後斷開連接
+            resetState()
             disconnect()
             
         default:
@@ -194,20 +169,14 @@ class MiniMaxWebSocketManager: NSObject {
         let combinedHexAudio = audioChunks.joined()
         guard let audioData = hexStringToData(combinedHexAudio) else { 
             logger.error("音頻數據轉換失敗")
-            DispatchQueue.main.async {
-                self.isProcessingRequest = false
-            }
+            resetState()
             disconnect()
             return 
         }
         
         logger.info("音頻數據處理完成: \(audioData.count) bytes")
+        delegate?.playMP3Audio(audioData)
         
-        DispatchQueue.main.async {
-            self.delegate?.playMP3Audio(audioData)
-        }
-        
-        // 發送 task_finish 事件（按照 MiniMax API 規範）
         sendTaskFinish()
         audioChunks.removeAll()
     }
@@ -223,12 +192,9 @@ class MiniMaxWebSocketManager: NSObject {
                 "vol": 1,
                 "pitch": 0
             ],
-            "pronunciation_dict": [:],
             "audio_setting": [
                 "sample_rate": 32000,
-                "bitrate": 128000,
-                "format": "mp3",
-                "channel": 1
+                "format": "mp3"
             ]
         ]
         sendJSONMessage(message)
@@ -260,11 +226,7 @@ class MiniMaxWebSocketManager: NSObject {
                 webSocketTask.send(wsMessage) { [weak self] error in
                     if let error = error {
                         self?.logger.error("消息發送失敗: \(error.localizedDescription)")
-                        // 發送失敗時重置連接狀態
-                        DispatchQueue.main.async {
-                            self?.isConnected = false
-                            self?.isProcessingRequest = false
-                        }
+                        self?.resetState()
                     }
                 }
             }
@@ -274,30 +236,27 @@ class MiniMaxWebSocketManager: NSObject {
     }
     
     private func hexStringToData(_ hexString: String) -> Data? {
-        // 使用更簡單的方法將 hex 字符串轉換為 Data
         guard hexString.count % 2 == 0 else {
             logger.error("音頻 hex 字符串長度不是偶數")
             return nil
         }
         
-        var data = Data()
+        var data = Data(capacity: hexString.count / 2)
         var index = hexString.startIndex
         
         while index < hexString.endIndex {
             let nextIndex = hexString.index(index, offsetBy: 2)
             let byteString = String(hexString[index..<nextIndex])
             
-            if let byte = UInt8(byteString, radix: 16) {
-                data.append(byte)
-            } else {
-                logger.error("音頻 hex 字符串包含無效字符: \(byteString)")
+            guard let byte = UInt8(byteString, radix: 16) else {
+                logger.error("音頻 hex 字符串包含無效字符")
                 return nil
             }
             
+            data.append(byte)
             index = nextIndex
         }
         
-        logger.info("音頻 hex 轉換成功: \(hexString.count) 字符 -> \(data.count) bytes")
         return data
     }
 }

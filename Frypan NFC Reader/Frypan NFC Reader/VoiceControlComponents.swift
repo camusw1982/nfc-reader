@@ -18,6 +18,7 @@ struct TalkButtonView: View {
     let onStopRecording: () -> Void
     let onCancelRecording: () -> Void
     let onConfirmRecording: () -> Void
+    let onStopSpeech: () -> Void
     
     var body: some View {
         Button(action: {
@@ -27,13 +28,9 @@ struct TalkButtonView: View {
                 // 外圈脈衝動畫 - 持續顯示以吸引用戶
                 Circle()
                     .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                    .frame(width: 110, height: 110)
                     .scaleEffect(pulseScale)
                     .opacity(pulseOpacity)
-                    .frame(width: 110, height: 110)
-                    .animation(
-                        .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
-                        value: pulseScale
-                    )
                 
                 // 主按鈕
                 Circle()
@@ -43,12 +40,13 @@ struct TalkButtonView: View {
                     .frame(width: 90, height: 90)
                     .animation(.easeInOut(duration: 0.1), value: voiceManager.slideOffset)
                     .animation(.easeInOut(duration: 0.1), value: voiceManager.isPressingTalkButton)
+                    .scaleEffect(voiceManager.isPressingTalkButton ? 0.9 : 1.0)
                 
                 // 麥克風圖標
-                Image(systemName: speechRecognizer.isRecognizing ? "microphone.badge.ellipsis.fill" : "microphone.fill")
-                    .font(.system(size: 50, weight: .regular))
+                Image(systemName: speechRecognizer.isRecognizing ? "microphone.fill" : "microphone.fill")
+                    .font(.system(size: 32, weight: .regular))
                     .foregroundColor(.white)
-                    .scaleEffect(voiceManager.isPressingTalkButton ? 0.7 : 1.0)
+                    .scaleEffect(voiceManager.isPressingTalkButton ? 0.9 : 1.0)
             }
         }
         .simultaneousGesture(
@@ -68,8 +66,10 @@ struct TalkButtonView: View {
     
     private func startPulseAnimation() {
         // 設置脈衝動畫目標值
-        pulseScale = 1.3
-        pulseOpacity = 0.2
+        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+            pulseScale = 1.3
+            pulseOpacity = 0.2
+        }
     }
     
     private func handleDragChanged(_ value: DragGesture.Value) {
@@ -83,6 +83,8 @@ struct TalkButtonView: View {
         
         if !speechRecognizer.isRecognizing {
             print("🎤 開始語音識別")
+            // 先停止語音播放
+            onStopSpeech()
             // 清空之前的識別文本
             speechRecognizer.recognizedText = ""
             onStartRecording()
@@ -168,11 +170,11 @@ struct SlideControlsView: View {
             HStack(spacing: 110) {
                 // 取消按鈕
                 Circle()
-                    .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(0.8) : Color.red.opacity(0.3))
+                    .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(1) : Color.red.opacity(0.8))
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "xmark")
-                            .font(.system(size: 33, weight: .bold))
+                            .font(.system(size: 30, weight: .bold))
                             .foregroundColor(.white)
                             .scaleEffect(voiceManager.slideOffset < -50 ? 1.2 : 1.0)
                     )
@@ -180,15 +182,15 @@ struct SlideControlsView: View {
                 
                 // 確認按鈕
                 Circle()
-                    .fill(voiceManager.slideOffset > 50 ? Color.green.opacity(0.8) : Color.green.opacity(0.3))
+                    .fill(voiceManager.slideOffset > 50 ? Color.green.opacity(1) : Color.green.opacity(0.8))
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "checkmark")
-                            .font(.system(size: 33, weight: .bold))
+                            .font(.system(size: 30, weight: .bold))
                             .foregroundColor(.white)
                             .scaleEffect(voiceManager.slideOffset > 50 ? 1.2 : 1.0)
                     )
-                    .animation(.easeInOut(duration: 0.3), value: voiceManager.slideOffset)
+                    .animation(.easeInOut(duration: 0.2), value: voiceManager.slideOffset)
             }
             .padding(.horizontal, 20)
             .transition(.asymmetric(
