@@ -18,9 +18,9 @@ struct LandingPageView: View {
     @State private var showSpeechPermissionAlert = false
     @Environment(\.dismiss) private var dismiss
     
-    // 使用共享的 WebSocketManager 實例，避免重複創建
-    private var webSocketManager: WebSocketManager {
-        return WebSocketManager.shared
+    // 使用共享的 HTTPManager 實例，避免重複創建
+    private var httpManager: HTTPManager {
+        return HTTPManager.shared
     }
     
     var body: some View {
@@ -65,7 +65,7 @@ struct LandingPageView: View {
                 // 主要內容區域 - 佔滿整個屏幕
                 VStack(spacing: 0) {
                     // 頂部標題欄
-                    HeaderView(webSocketManager: webSocketManager)
+                    HeaderView(httpManager: httpManager)
                     
                     // 對話區域 - 佔滿剩餘空間
                     ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
@@ -102,7 +102,7 @@ struct LandingPageView: View {
                     
                     // 底部工具欄
                     BottomToolbarView(
-                        webSocketManager: webSocketManager,
+                        httpManager: httpManager,
                         onClearChat: { speechRecognizer.clearChat() }
                     )
                 }
@@ -143,30 +143,30 @@ struct LandingPageView: View {
     
     private func initializeView() {
         // 設置服務管理器之間的關聯
-        webServiceManager.setWebSocketManager(webSocketManager)
+        // webServiceManager.setWebSocketManager(httpManager) // TODO: 需要更新 WebServiceManager 來支持 HTTPManager
         speechRecognizer.webService = webServiceManager
         
-        // 設置 WebSocketManager 的 speechRecognizer 引用
-        webSocketManager.speechRecognizer = speechRecognizer
+        // 設置 HTTPManager 的 speechRecognizer 引用
+        httpManager.speechRecognizer = speechRecognizer
         
         // 初始化語音控制功能
         voiceManager.initialize()
         
-        // 自動連接到 WebSocket
-        webSocketManager.connect()
+        // 自動連接到 HTTP 服務器
+        httpManager.connect()
         
         // 只有在人物名稱為空時才獲取當前人物名稱
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if webSocketManager.characterName.isEmpty || webSocketManager.characterName == "AI 語音助手" {
-                webSocketManager.getCharacterName()
+            if httpManager.characterName.isEmpty || httpManager.characterName == "AI 語音助手" {
+                httpManager.getCharacterName()
             }
         }
     }
     
     private func cleanup() {
-        // 停止語音識別和斷開 WebSocket
+        // 停止語音識別和斷開 HTTP 連接
         speechRecognizer.stopRecording()
-        webSocketManager.disconnect()
+        httpManager.disconnect()
     }
     
     private func startSpeechRecognition() {
@@ -189,12 +189,12 @@ struct LandingPageView: View {
     private func confirmRecording() {
         voiceManager.confirmRecording(
             speechRecognizer: speechRecognizer,
-            webSocketManager: webSocketManager
+            serviceManager: httpManager
         )
     }
     
     private func stopSpeech() {
-        webSocketManager.stopAudio()
+        httpManager.stopAudio()
     }
     
     private func goBackToNFCReader() {

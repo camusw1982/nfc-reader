@@ -22,8 +22,8 @@ struct NFCReaderView: View {
     @State private var characterData: [String: Any]?
     
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "NFCReaderView")
-    private var webSocketManager: WebSocketManager {
-        return WebSocketManager.shared
+    private var httpManager: HTTPManager {
+        return HTTPManager.shared
     }
     
     var body: some View {
@@ -187,10 +187,10 @@ struct NFCReaderView: View {
                 LandingPageView()
                     .navigationBarBackButtonHidden(true)
                     .onAppear {
-                        // 將讀取到的 character ID 設置到 WebSocketManager
+                        // 將讀取到的 character ID 設置到 HTTPManager
                         if !characterID.isEmpty {
                             logger.info("🚀 跳轉到 LandingPageView，Character ID: \(characterID)")
-                            WebSocketManager.shared.setCharacter_id(Int(characterID) ?? 1)
+                            HTTPManager.shared.setCharacter_id(Int(characterID) ?? 1)
                         }
                     }
             }

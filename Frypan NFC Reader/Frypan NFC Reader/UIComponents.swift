@@ -10,10 +10,10 @@ import Foundation
 
 // MARK: - Header View
 struct HeaderView: View {
-    @ObservedObject private var webSocketManager: WebSocketManager
+    @ObservedObject private var httpManager: HTTPManager
     
-    init(webSocketManager: WebSocketManager?) {
-        self.webSocketManager = webSocketManager ?? WebSocketManager.shared
+    init(httpManager: HTTPManager?) {
+        self.httpManager = httpManager ?? HTTPManager.shared
     }
     
     var body: some View {
@@ -31,8 +31,8 @@ struct HeaderView: View {
                 
                 Spacer()
                 
-                // WebSocket 狀態指示器
-                ConnectionStatusView(webSocketManager: webSocketManager)
+                // HTTP 狀態指示器
+                ConnectionStatusView(httpManager: httpManager)
             }
         }
         .padding(.horizontal, 20)
@@ -41,24 +41,24 @@ struct HeaderView: View {
     }
     
     private func getCharacterName() -> String {
-        return webSocketManager.characterName
+        return httpManager.characterName
     }
 }
 
 // MARK: - Connection Status View
 struct ConnectionStatusView: View {
-    @ObservedObject var webSocketManager: WebSocketManager
+    @ObservedObject var httpManager: HTTPManager
     
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(webSocketManager.isConnected ? Color.green : Color.red)
+                .fill(httpManager.isConnected ? Color.green : Color.red)
                 .frame(width: 8, height: 8)
-            Text(webSocketManager.connectionStatus)
+            Text(httpManager.connectionStatus)
                 .font(.caption)
-                .foregroundColor(webSocketManager.isConnected ? Color.green : Color.red)
-            //if !webSocketManager.connectionId.isEmpty {
-            //    Text("(\(webSocketManager.connectionId))")
+                .foregroundColor(httpManager.isConnected ? Color.green : Color.red)
+            //if !httpManager.connectionId.isEmpty {
+            //    Text("(\(httpManager.connectionId))")
             //        .font(.caption2)
             //        .foregroundColor(.white.opacity(0.6))
             //}
@@ -68,11 +68,11 @@ struct ConnectionStatusView: View {
 
 // MARK: - Bottom Toolbar View
 struct BottomToolbarView: View {
-    @ObservedObject private var webSocketManager: WebSocketManager
+    @ObservedObject private var httpManager: HTTPManager
     let onClearChat: () -> Void
     
-    init(webSocketManager: WebSocketManager?, onClearChat: @escaping () -> Void) {
-        self.webSocketManager = webSocketManager ?? WebSocketManager.shared
+    init(httpManager: HTTPManager?, onClearChat: @escaping () -> Void) {
+        self.httpManager = httpManager ?? HTTPManager.shared
         self.onClearChat = onClearChat
     }
     
@@ -85,19 +85,19 @@ struct BottomToolbarView: View {
             }
             
             Button(action: {
-                if webSocketManager.isConnected {
-                    webSocketManager.disconnect()
+                if httpManager.isConnected {
+                    httpManager.disconnect()
                 } else {
-                    webSocketManager.connect()
+                    httpManager.connect()
                 }
             }) {
-                Image(systemName: webSocketManager.isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                Image(systemName: httpManager.isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
                     .font(.system(size: 18))
-                    .foregroundColor(webSocketManager.isConnected ? Color.green : Color.white.opacity(0.7))
+                    .foregroundColor(httpManager.isConnected ? Color.green : Color.white.opacity(0.7))
             }
             
             Button(action: {
-                webSocketManager.clearHistory()
+                httpManager.clearHistory()
             }) {
                 Image(systemName: "clock.badge.xmark")
                     .font(.system(size: 18))
@@ -106,11 +106,11 @@ struct BottomToolbarView: View {
             
             Button(action: {
                 // 停止所有音頻播放
-                webSocketManager.stopAudio()  // 停止所有音頻播放
+                httpManager.stopAudio()  // 停止所有音頻播放
             }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 18))
-                    .foregroundColor(webSocketManager.isPlayingAudio ? Color.red : Color.white.opacity(0.5))
+                    .foregroundColor(httpManager.isPlayingAudio ? Color.red : Color.white.opacity(0.5))
             }
             
             Spacer()

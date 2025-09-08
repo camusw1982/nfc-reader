@@ -93,7 +93,7 @@ class VoiceControlManager: ObservableObject {
         print("🚫 錄音已取消，不會發送任何內容")
     }
     
-    func confirmRecording(speechRecognizer: SpeechRecognizer, webSocketManager: WebSocketManager?) {
+    func confirmRecording(speechRecognizer: SpeechRecognizer, serviceManager: (any ServiceProtocol)?) {
         // 防止重複確認
         guard !isRecordingConfirmed else {
             print("⚠️ 錄音已經被處理，忽略重複確認")
@@ -116,8 +116,8 @@ class VoiceControlManager: ObservableObject {
             
             print("📤 準備發送文本到服務器: '\(recognizedText)'")
             
-            // 立即發送到 WebSocket 進行語音合成
-            webSocketManager?.sendTextToSpeech(text: recognizedText)
+            // 立即發送到服務器進行語音合成
+            serviceManager?.sendTextToSpeech(text: recognizedText, character_id: nil)
             
             // 成功確認的震動反饋
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)

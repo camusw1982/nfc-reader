@@ -82,9 +82,9 @@ struct EntryView: View {
                     Button(action: {
                         if let character_id = selectedCharacter {
                             print("✅ 確認選擇人物 ID: \(character_id)")
-                            // 設置選擇的人物到 WebSocketManager
-                            WebSocketManager.shared.setCharacter_id(character_id)
-                            print("📡 已發送人物 ID 到 WebSocketManager")
+                            // 設置選擇的人物到 HTTPManager
+                            HTTPManager.shared.setCharacter_id(character_id)
+                            print("📡 已發送人物 ID 到 HTTPManager")
                             navigateToLanding = true
                         }
                     }) {

@@ -80,7 +80,7 @@ struct UserBubbleView: View {
 // MARK: - AI Bubble (Left Side)
 struct AIBubbleView: View {
     let message: ChatMessage
-    @StateObject private var webSocketManager = WebSocketManager.shared
+    @StateObject private var httpManager = HTTPManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -88,7 +88,7 @@ struct AIBubbleView: View {
                 Image(systemName: "brain.head.profile")
                     .font(.caption)
                     .foregroundColor(.blue)
-                Text(webSocketManager.characterName)
+                Text(httpManager.characterName)
                     .font(.caption)
                     .foregroundColor(.blue)
                 Text(formatTime(message.timestamp))
