@@ -42,7 +42,7 @@ class WebSocketManager: NSObject, ObservableObject {
     @Published var audioProgress: Double = 0.0
     @Published var geminiResponse: String = ""
     @Published var connectionId: String = ""
-    @Published var currentCharacterId: Int = 3
+    @Published var currentCharacter_id: Int = 3
     
     // MARK: - Private Properties
     private var webSocketTask: URLSessionWebSocketTask?
@@ -204,35 +204,35 @@ extension WebSocketManager {
 // MARK: - Message Sending
 extension WebSocketManager {
     
-    func sendText(_ text: String, characterId: Int? = nil) {
+    func sendText(_ text: String, character_id: Int? = nil) {
         // 發送標準的文本消息格式，包含角色 ID
-        let characterIdToUse = characterId ?? currentCharacterId
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "text",
             "text": text,
-            "character_id": characterIdToUse
+            "character_id": character_idToUse
         ]
         sendJSONMessage(message)
-        print("📤 發送文本到 WebSocket: \(text) (角色ID: \(characterIdToUse))")
+        print("📤 發送文本到 WebSocket: \(text) (角色ID: \(character_idToUse))")
     }
     
-    func sendTextToSpeech(text: String, voiceId: String = "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430", characterId: Int? = nil) {
+    func sendTextToSpeech(text: String, voiceId: String = "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430", character_id: Int? = nil) {
         // 停止當前播放
         audioPlayer?.stop()
         audioPlayer = nil
         
-        let characterIdToUse = characterId ?? currentCharacterId
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "gemini_chat",
             "text": text,
             "voice_id": voiceId,
-            "character_id": characterIdToUse,
+            "character_id": character_idToUse,
             "streaming": true,
             "device_id": connectionId
         ]
         
         sendJSONMessage(message)
-        print("🎤 發送文本到語音合成: \(text) (角色ID: \(characterIdToUse))")
+        print("🎤 發送文本到語音合成: \(text) (角色ID: \(character_idToUse))")
     }
     
     func sendPing() {
@@ -607,9 +607,9 @@ extension WebSocketManager {
     }
     
     // MARK: - Character Management
-    func setCharacterId(_ characterId: Int) {
-        currentCharacterId = characterId
-        print("🎭 設置角色 ID: \(characterId)")
+    func setCharacter_id(_ character_id: Int) {
+        currentCharacter_id = character_id
+        print("🎭 設置角色 ID: \(character_id)")
     }
     
     // MARK: - Audio Processing
@@ -884,8 +884,8 @@ extension WebSocketManager {
         }.resume()
     }
     
-    func getCurrentCharacterId() -> Int {
-        return currentCharacterId
+    func getCurrentCharacter_id() -> Int {
+        return currentCharacter_id
     }
     
     // MARK: - Debug Methods
@@ -895,7 +895,7 @@ extension WebSocketManager {
         print("🔍 連接狀態: \(isConnected ? "已連接" : "未連接")")
         
         // 發送測試消息
-        sendText("測試消息", characterId: 1)
+        sendText("測試消息", character_id: 1)
     }
     
     func testSendPing() {

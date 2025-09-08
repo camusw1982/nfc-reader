@@ -16,7 +16,7 @@ protocol WebSocketServiceProtocol: ObservableObject {
     
     func connect()
     func disconnect()
-    func sendTextToSpeech(text: String, characterId: Int?)
+    func sendTextToSpeech(text: String, character_id: Int?)
     func sendPing()
     func clearHistory()
     func getHistory()
@@ -96,7 +96,7 @@ class WebServiceManager: ObservableObject {
         logger.info("通過 WebSocket 發送語音識別結果到 Gemini 語音合成")
         
         // 直接發送 gemini_chat 請求
-        webSocketManager.sendTextToSpeech(text: text, characterId: nil)
+        webSocketManager.sendTextToSpeech(text: text, character_id: nil)
         
         // WebSocket 是異步的，我們假設發送成功
         // 實際應用中可以通過 WebSocket 確認機制來確保發送成功

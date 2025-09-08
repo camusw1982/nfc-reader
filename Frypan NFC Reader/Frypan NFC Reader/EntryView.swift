@@ -30,21 +30,27 @@ struct EntryView: View {
                         // 人物1
                         CharacterCircle(
                             name: "人物1",
-                            characterId: 1,
+                            character_id: 1,
                             selectedCharacter: $selectedCharacter
                         )
                         
                         // 人物2
                         CharacterCircle(
                             name: "人物2", 
-                            characterId: 2,
+                            character_id: 2,
                             selectedCharacter: $selectedCharacter
                         )
                         
                         // 人物3
                         CharacterCircle(
                             name: "人物3",
-                            characterId: 3,
+                            character_id: 3,
+                            selectedCharacter: $selectedCharacter
+                        )
+                        
+                        CharacterCircle(
+                            name: "人物4",
+                            character_id: 4,
                             selectedCharacter: $selectedCharacter
                         )
                     }
@@ -54,10 +60,10 @@ struct EntryView: View {
                     
                     // 確認按鈕
                     Button(action: {
-                        if let characterId = selectedCharacter {
-                            print("✅ 確認選擇人物 ID: \(characterId)")
+                        if let character_id = selectedCharacter {
+                            print("✅ 確認選擇人物 ID: \(character_id)")
                             // 設置選擇的人物到 WebSocketManager
-                            WebSocketManager.shared.setCharacterId(characterId)
+                            WebSocketManager.shared.setCharacter_id(character_id)
                             print("📡 已發送人物 ID 到 WebSocketManager")
                             navigateToLanding = true
                         }
@@ -85,19 +91,19 @@ struct EntryView: View {
 
 struct CharacterCircle: View {
     let name: String
-    let characterId: Int
+    let character_id: Int
     @Binding var selectedCharacter: Int?
     
     var body: some View {
         VStack(spacing: 15) {
             // 圓形按鈕
             Button(action: {
-                print("🎯 點擊了人物: \(name) (ID: \(characterId))")
-                selectedCharacter = characterId
+                print("🎯 點擊了人物: \(name) (ID: \(character_id))")
+                selectedCharacter = character_id
             }) {
                 ZStack {
                     Circle()
-                        .fill(selectedCharacter == characterId ? Color.blue : Color.gray.opacity(0.3))
+                        .fill(selectedCharacter == character_id ? Color.blue : Color.gray.opacity(0.3))
                         .frame(width: 100, height: 100)
                     
                     // 人物圖標 (使用 SF Symbols)
@@ -106,7 +112,7 @@ struct CharacterCircle: View {
                         .foregroundColor(.white)
                 }
             }
-            .scaleEffect(selectedCharacter == characterId ? 1.1 : 1.0)
+            .scaleEffect(selectedCharacter == character_id ? 1.1 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: selectedCharacter)
             
             // 人物名稱

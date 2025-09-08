@@ -20,7 +20,7 @@ class WebSocketManager: NSObject, ObservableObject {
     @Published var lastError: String?
     @Published var receivedMessages: [String] = []
     @Published var geminiResponse: String = ""
-    @Published var currentCharacterId: Int = 3
+    @Published var currentCharacter_id: Int = 3
     
     // MARK: - Private Properties
     private var webSocketTask: URLSessionWebSocketTask?
@@ -123,23 +123,23 @@ extension WebSocketManager {
 // MARK: - Message Sending
 extension WebSocketManager {
     
-    func sendText(_ text: String, characterId: Int? = nil) {
-        let characterIdToUse = characterId ?? currentCharacterId
+    func sendText(_ text: String, character_id: Int? = nil) {
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "text",
             "text": text,
-            "character_id": characterIdToUse
+            "character_id": character_idToUse
         ]
         sendJSONMessage(message)
         print("📤 發送文本: \(text)")
     }
     
-    func sendTextToSpeech(text: String, characterId: Int? = nil) {
-        let characterIdToUse = characterId ?? currentCharacterId
+    func sendTextToSpeech(text: String, character_id: Int? = nil) {
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "gemini_chat",
             "text": text,
-            "character_id": characterIdToUse,
+            "character_id": character_idToUse,
             "streaming": true
         ]
         
@@ -435,11 +435,11 @@ extension WebSocketManager {
         audioPlayer?.stop()
     }
     
-    func setCharacterId(_ characterId: Int) {
-        currentCharacterId = characterId
+    func setCharacter_id(_ character_id: Int) {
+        currentCharacter_id = character_id
     }
     
-    func getCurrentCharacterId() -> Int {
-        return currentCharacterId
+    func getCurrentCharacter_id() -> Int {
+        return currentCharacter_id
     }
 }

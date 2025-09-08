@@ -24,7 +24,7 @@ class WebSocketManager: NSObject, ObservableObject, WebSocketServiceProtocol, Mi
     @Published var isPlayingAudio = false
     @Published var geminiResponse: String = ""
     @Published var connectionId: String = ""
-    @Published var currentCharacterId: Int = 1
+    @Published var currentCharacter_id: Int = 1
     @Published var characterName: String = "AI 語音助手"
     
     // MARK: - Speech Recognizer Reference
@@ -149,28 +149,28 @@ extension WebSocketManager {
 // MARK: - Message Sending
 extension WebSocketManager {
     
-    func sendText(_ text: String, characterId: Int? = nil) {
-        let characterIdToUse = characterId ?? currentCharacterId
+    func sendText(_ text: String, character_id: Int? = nil) {
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "text",
             "text": text,
-            "character_id": characterIdToUse
+            "character_id": character_idToUse
         ]
-        print("📤 發送文本消息，使用人物 ID: \(characterIdToUse)")
+        print("📤 發送文本消息，使用人物 ID: \(character_idToUse)")
         sendJSONMessage(message)
         logger.info("發送文本: \(text)")
     }
     
-    func sendTextToSpeech(text: String, characterId: Int? = nil) {
-        let characterIdToUse = characterId ?? currentCharacterId
+    func sendTextToSpeech(text: String, character_id: Int? = nil) {
+        let character_idToUse = character_id ?? currentCharacter_id
         let message: [String: Any] = [
             "type": "gemini_chat",
             "text": text,
-            "character_id": characterIdToUse,
+            "character_id": character_idToUse,
             "streaming": true
         ]
         
-        print("🎤 發送語音合成請求，使用人物 ID: \(characterIdToUse)")
+        print("🎤 發送語音合成請求，使用人物 ID: \(character_idToUse)")
         sendJSONMessage(message)
         logger.info("發送語音合成請求: \(text)")
     }
@@ -190,8 +190,8 @@ extension WebSocketManager {
         sendJSONMessage(historyMessage)
     }
     
-    func getCharacterName(for characterId: Int? = nil) {
-        let targetId = characterId ?? currentCharacterId
+    func getCharacterName(for character_id: Int? = nil) {
+        let targetId = character_id ?? currentCharacter_id
         let characterInfoMessage: [String: Any] = [
             "type": "get_character_name",
             "character_id": targetId
@@ -199,10 +199,10 @@ extension WebSocketManager {
         sendJSONMessage(characterInfoMessage)
     }
     
-    func updateCharacterName(_ name: String, for characterId: Int? = nil) {
+    func updateCharacterName(_ name: String, for character_id: Int? = nil) {
         DispatchQueue.main.async {
-            let targetId = characterId ?? self.currentCharacterId
-            if targetId == self.currentCharacterId {
+            let targetId = character_id ?? self.currentCharacter_id
+            if targetId == self.currentCharacter_id {
                 self.characterName = name
             }
             self.logger.info("更新人物 ID \(targetId) 的名稱為: \(name)")
@@ -320,9 +320,9 @@ extension WebSocketManager {
     }
     
     private func handleCharacterName(_ json: [String: Any]) {
-        if let characterId = json["character_id"] as? Int,
+        if let character_id = json["character_id"] as? Int,
            let characterName = json["character_name"] as? String {
-            updateCharacterName(characterName, for: characterId)
+            updateCharacterName(characterName, for: character_id)
         }
     }
     
@@ -337,18 +337,23 @@ extension WebSocketManager {
                 
                 print("🤖 添加 AI 回應到聊天: \(response)")
             }
-            triggerTextToSpeech(response)
+            
+            // 提取 voice_id 並觸發 TTS
+            let voiceId = json["voice_id"] as? String ?? "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430"
+            print("🎵 使用 voice_id: \(voiceId)")
+            triggerTextToSpeech(response, voiceId: voiceId)
         }
     }
     
-    private func triggerTextToSpeech(_ text: String) {
+    private func triggerTextToSpeech(_ text: String, voiceId: String = "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430") {
         guard !text.isEmpty, let miniMaxManager = miniMaxWebSocketManager else { 
             logger.warning("MiniMax WebSocket 管理器未初始化")
             return 
         }
         
-        // 使用 MiniMax WebSocket 管理器進行文本轉語音
-        miniMaxManager.textToSpeech(text)
+        // 使用 MiniMax WebSocket 管理器進行文本轉語音，傳遞正確的 voice_id
+        print("🎵 觸發 TTS: text=\(text.prefix(30))..., voiceId=\(voiceId)")
+        miniMaxManager.textToSpeech(text, voiceId: voiceId)
     }
 }
 
@@ -404,19 +409,19 @@ extension WebSocketManager {
         audioManager.stopAudio()
     }
     
-    func setCharacterId(_ characterId: Int) {
+    func setCharacter_id(_ character_id: Int) {
         DispatchQueue.main.async {
-            print("🎭 WebSocketManager 接收到人物 ID 設置: \(characterId)")
-            self.currentCharacterId = characterId
+            print("🎭 WebSocketManager 接收到人物 ID 設置: \(character_id)")
+            self.currentCharacter_id = character_id
             self.characterName = "AI 語音助手" // 重置為默認名稱
-            print("✅ WebSocketManager 已更新當前人物 ID 為: \(self.currentCharacterId)")
+            print("✅ WebSocketManager 已更新當前人物 ID 為: \(self.currentCharacter_id)")
             
             // 請求新人物的名稱
-            self.getCharacterName(for: characterId)
+            self.getCharacterName(for: character_id)
         }
     }
     
-    func getCurrentCharacterId() -> Int {
-        return currentCharacterId
+    func getCurrentCharacter_id() -> Int {
+        return currentCharacter_id
     }
 }

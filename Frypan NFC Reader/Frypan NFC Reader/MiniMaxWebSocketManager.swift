@@ -33,17 +33,17 @@ class MiniMaxWebSocketManager: NSObject {
     }
     
     // MARK: - Public Methods
-    func textToSpeech(_ text: String) {
+    func textToSpeech(_ text: String, voiceId: String = "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430") {
         guard !isProcessing else { 
             logger.warning("MiniMax 正在處理其他請求")
             return 
         }
         
-        logger.info("開始語音合成: \(text.prefix(50))...")
+        logger.info("開始語音合成: \(text.prefix(50))... (voice_id: \(voiceId))")
         isProcessing = true
         audioChunks.removeAll()
         
-        connectAndProcessText(text)
+        connectAndProcessText(text, voiceId: voiceId)
     }
     
     func disconnect() {
@@ -59,7 +59,7 @@ class MiniMaxWebSocketManager: NSObject {
     }
     
     // MARK: - Private Methods
-    private func connectAndProcessText(_ text: String) {
+    private func connectAndProcessText(_ text: String, voiceId: String) {
         guard let url = URL(string: baseURL) else { 
             logger.error("無效的 MiniMax WebSocket URL")
             resetState()
@@ -80,7 +80,7 @@ class MiniMaxWebSocketManager: NSObject {
         
         // 等待連接建立後發送任務開始
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.sendTaskStart()
+            self.sendTaskStart(voiceId: voiceId)
             
             // 再等待一下後發送文本
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -181,13 +181,13 @@ class MiniMaxWebSocketManager: NSObject {
         audioChunks.removeAll()
     }
     
-    private func sendTaskStart() {
+    private func sendTaskStart(voiceId: String) {
         let message: [String: Any] = [
             "event": "task_start",
             "model": "speech-02-turbo",
             "language_boost": "Chinese,Yue",
             "voice_setting": [
-                "voice_id": "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430",
+                "voice_id": voiceId,
                 "speed": 1,
                 "vol": 1,
                 "pitch": 0
@@ -197,6 +197,7 @@ class MiniMaxWebSocketManager: NSObject {
                 "format": "mp3"
             ]
         ]
+        logger.info("🎵 發送 task_start，使用 voice_id: \(voiceId)")
         sendJSONMessage(message)
     }
     
