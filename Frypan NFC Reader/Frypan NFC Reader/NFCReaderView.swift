@@ -71,11 +71,11 @@ struct NFCReaderView: View {
                             )
                         // 主圓圈
                         Circle()
-                            .stroke(Color.blue, lineWidth: 3)
+                            .stroke(Color.blue, lineWidth: 2)
                             .frame(width: 280, height: 280)
                             .background(
                                 Circle()
-                                    .fill(Color.blue.opacity(0.2))
+                                    .fill(Color.blue.opacity(0.4))
                                     .frame(width: 280, height: 280)
                             )
                         
@@ -171,8 +171,27 @@ struct NFCReaderView: View {
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
                         )
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 20)
                     .disabled(nfcManager.isReading)
+                    
+                    // 即時串流測試按鈕
+                    NavigationLink(destination: MinimaxStreamTestView()) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "waveform")
+                                .font(.system(size:20))
+                            Text("測試即時串流")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.orange)
+                                .shadow(color: .orange.opacity(0.3), radius: 5, x: 0, y: 2)
+                        )
+                    }
+                    .padding(.bottom, 40)
                 }
             }
             .onAppear {
@@ -219,6 +238,7 @@ struct NFCReaderView: View {
         nfcManager.startReading()
     }
     
+        
     // MARK: - Character ID 驗證
     
     private func validateCharacterID(_ id: String) {

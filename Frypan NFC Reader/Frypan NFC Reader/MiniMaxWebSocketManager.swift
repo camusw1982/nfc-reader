@@ -184,7 +184,7 @@ class MiniMaxWebSocketManager: NSObject {
     private func sendTaskStart(voiceId: String) {
         let message: [String: Any] = [
             "event": "task_start",
-            "model": "speech-02-hd",
+            "model": "speech-02-turbo",
             "language_boost": "Chinese,Yue",
             "voice_setting": [
                 "voice_id": voiceId,
