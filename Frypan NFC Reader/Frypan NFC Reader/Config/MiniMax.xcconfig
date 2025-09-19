@@ -1,0 +1,13 @@
+// MiniMax API 配置
+// 請將以下環境變數設置喺 Xcode Build Settings 入面
+// 或者喺終端機運行：
+// export MINIMAX_API_KEY="your_api_key_here"
+// export MINIMAX_GROUP_ID="1920866061935186857"
+
+// 從環境變數讀取配置
+MINIMAX_API_KEY = $(MINIMAX_API_KEY)
+MINIMAX_GROUP_ID = $(MINIMAX_GROUP_ID)
+
+// 如果環境變數冇設置，使用預設值（僅用於開發）
+// MINIMAX_API_KEY = [YOUR_DEFAULT_API_KEY]
+// MINIMAX_GROUP_ID = 1920866061935186857

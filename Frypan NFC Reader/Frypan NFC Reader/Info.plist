@@ -96,9 +96,11 @@
         </dict>
     </dict>
     
-    <!-- MiniMax API 配置 -->
+    <!-- MiniMax API 配置 - 使用環境變數 -->
     <key>MINIMAX_API_KEY</key>
-    <string>eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJDYW11cyBXb25nIiwiVXNlck5hbWUiOiJDYW11cyBXb25nIiwiQWNjb3VudCI6IiIsIlN1YmplY3RJRCI6IjE5MjA4NjYwNjE5NDM1NzU0NjUiLCJQaG9uZSI6IiIsIkdyb3VwSUQiOiIxOTIwODY2MDYxOTM1MTg2ODU3IiwiUGFnZU5hbWUiOiIiLCJNYWlsIjoiY2FtdXN3MTk4MkBnbWFpbC5jb20iLCJDcmVhdGVUaW1lIjoiMjAyNS0wOS0wNyAxODoxNDo0MiIsIlRva2VuVHlwZSI6MSwiaXNzIjoibWluaW1heCJ9.f8-AdyvvJj2tXjGi3SH8_W0KzmFANPpHypQHHTDv01MuNFS90nOt2PSs9FFzZMILJbE-uTBh2IGUPG9Kqd1JYuTQD0M_sxI9hilFlQEpd13ZK3I5rBgkO71_vUP8armkjCdqSyz6G83sUJR16B1pl7YRzFfnT37TyxzK95SVOz4RliA5b-3M8GfpEZfnPU16tXMEX0bZYs6TgaaSELhMgFzytvNi_-P5V-Rv2VsB-RWIACpL_5TeLYu-VU1FwLNWLY7c0U5aE7mkshosqQ_9cglxYyJttEeC6CNMi_IMVdQYqBl1iaqlxugcTfrXRYytOeTTvm-CjjMCkMnhtQonzA</string>
+    <string>$(MINIMAX_API_KEY)</string>
+    <key>MINIMAX_GROUP_ID</key>
+    <string>$(MINIMAX_GROUP_ID)</string>
     
     </dict>
 </plist>

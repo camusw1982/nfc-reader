@@ -173,9 +173,9 @@ struct NFCReaderView: View {
                     }
                     .padding(.bottom, 20)
                     .disabled(nfcManager.isReading)
-                    
+
                     // 即時串流測試按鈕 (AVAudioPlayer)
-                    NavigationLink(destination: MinimaxStreamTestView()) {
+                    /*NavigationLink(destination: MinimaxStreamTestView()) {
                         HStack(spacing: 6) {
                             Image(systemName: "waveform")
                                 .font(.system(size:20))
@@ -209,7 +209,7 @@ struct NFCReaderView: View {
                                 .fill(Color.blue)
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
                         )
-                    }
+                    } */
                     .padding(.bottom, 40)
                 }
             }

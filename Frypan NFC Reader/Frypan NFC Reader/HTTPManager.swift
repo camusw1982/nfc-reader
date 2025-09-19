@@ -57,7 +57,7 @@ struct HTTPCharacterRequest: Codable {
 }
 
 // MARK: - HTTP Manager
-class HTTPManager: NSObject, ObservableObject, ServiceProtocol, MiniMaxWebSocketManagerDelegate {
+class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
     
     // MARK: - Shared Instance
     static let shared = HTTPManager()
@@ -83,7 +83,7 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, MiniMaxWebSocket
     // MARK: - Private Properties
     private let serverURL: URL
     private let audioManager: AudioManager
-    private var miniMaxWebSocketManager: MiniMaxWebSocketManager?
+    private var miniMaxStreamManager: MiniMaxStreamManager?
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "HTTP")
     private var connectionCheckTimer: Timer?
     
@@ -100,7 +100,7 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, MiniMaxWebSocket
         self.connectionId = newConnectionId
         logger.info("設備連接 ID: \(newConnectionId)")
         
-        setupMiniMaxAPI()
+        setupMiniMaxStreamManager()
         setupAudioBinding()
         checkConnection()
     }
@@ -125,17 +125,16 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, MiniMaxWebSocket
             .assign(to: &$isPlayingAudio)
     }
     
-    private func setupMiniMaxAPI() {
+    private func setupMiniMaxStreamManager() {
         guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "MINIMAX_API_KEY") as? String,
               !apiKey.isEmpty else {
             logger.warning("MiniMax API Key 未設置，語音合成功能將不可用")
             return
         }
-        
-        // 初始化 MiniMax WebSocket 管理器
-        self.miniMaxWebSocketManager = MiniMaxWebSocketManager(apiKey: apiKey)
-        self.miniMaxWebSocketManager?.delegate = self
-        logger.info("MiniMax WebSocket 管理器已初始化")
+
+        // 初始化 MiniMax 串流管理器
+        self.miniMaxStreamManager = MiniMaxStreamManager()
+        logger.info("MiniMax 串流管理器已初始化")
     }
     
     private func checkConnection() {
@@ -160,13 +159,13 @@ extension HTTPManager {
     func disconnect() {
         // 停止音頻播放
         audioManager.stopAudio()
-        
-        // 斷開 MiniMax WebSocket 連接
-        miniMaxWebSocketManager?.disconnect()
-        
+
+        // 停止 MiniMax 串流
+        miniMaxStreamManager?.stopStreaming()
+
         // 停止連接檢查
         connectionCheckTimer?.invalidate()
-        
+
         setConnected(false)
     }
     
@@ -471,14 +470,14 @@ extension HTTPManager {
     }
     
     private func triggerTextToSpeech(_ text: String, voiceId: String = "DEBUG_VOICE_ID_NONE") {
-        guard !text.isEmpty, let miniMaxManager = miniMaxWebSocketManager else { 
-            logger.warning("MiniMax WebSocket 管理器未初始化")
-            return 
+        guard !text.isEmpty, let miniMaxManager = miniMaxStreamManager else {
+            logger.warning("MiniMax 串流管理器未初始化")
+            return
         }
-        
-        // 使用 MiniMax WebSocket 管理器進行文本轉語音，傳遞正確的 voice_id
+
+        // 使用 MiniMax 串流管理器進行文本轉語音，傳遞正確的 voice_id
         print("🎵 觸發 TTS: text=\(text.prefix(30))..., voiceId=\(voiceId)")
-        miniMaxManager.textToSpeech(text, voiceId: voiceId)
+        miniMaxManager.startStreaming(text: text, voiceId: voiceId)
     }
 }
 

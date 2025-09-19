@@ -541,7 +541,7 @@ struct MinimaxStreamTestView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(streamManager.isPlaying)
-            
+
             Button(action: {
                 streamManager.stopStreaming()
             }) {

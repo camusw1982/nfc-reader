@@ -1,0 +1,6 @@
+// Debug 環境配置
+#include "MiniMax.xcconfig"
+
+// Debug 專用設置
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+ONLY_ACTIVE_ARCH = YES
