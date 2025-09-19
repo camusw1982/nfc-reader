@@ -11,7 +11,7 @@ import AVFoundation
 import os.log
 
 // MARK: - Minimax AVAudioEngine Stream Manager
-class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
+class MinimaxAVEngineStreamManager: NSObject, ObservableObject {
 
     // MARK: - Properties
     @Published var isPlaying = false
@@ -27,20 +27,17 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
     private var streamStartTime: Date?
     private var firstChunkTime: Date?
 
-    // 音頻播放器 - 基本模式用
+    // 音頻播放器 - 基本模式用（保留向下兼容）
     private var audioPlayer: AVAudioPlayer?
 
     // AVAudioEngine 相關
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
-    private var mixer: AVAudioMixerNode?
     private var audioFormat: AVAudioFormat?
 
-    // 即時串流相關
-    private var isRealTimePlaying = false
+    // 音頻緩衝區隊列
     private var audioBufferQueue: [AVAudioPCMBuffer] = []
     private var isPlayingBuffer = false
-    private var audioPlayerQueue: [AVAudioPlayer] = []
 
     // 配置 - 參考現有嘅MinimaxStreamTestView
     private let groupId = "1920866061935186857"
@@ -71,23 +68,18 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
     private func setupAudioEngine() {
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
-        mixer = AVAudioMixerNode()
 
         // 使用與 API 請求相同嘅音頻格式
         audioFormat = AVAudioFormat(standardFormatWithSampleRate: 32000, channels: 1)
 
-        guard let engine = audioEngine, let player = playerNode, let mixer = mixer, let format = audioFormat else {
+        guard let engine = audioEngine, let player = playerNode, let format = audioFormat else {
             logger.error("音頻引擎初始化失敗")
             return
         }
 
         // 連接節點
         engine.attach(player)
-        engine.attach(mixer)
-
-        // 使用指定格式連接
-        engine.connect(player, to: mixer, format: format)
-        engine.connect(mixer, to: engine.mainMixerNode, format: format)
+        engine.connect(player, to: engine.mainMixerNode, format: format)
 
         logger.info("AVAudioEngine 初始化成功，格式: 32000Hz, 1通道")
     }
@@ -115,7 +107,6 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
         logger.info("停止串流 (AVAudioEngine)")
         isProcessing = false
         isPlaying = false
-        isRealTimePlaying = false
         urlSessionTask?.cancel()
         urlSessionTask = nil
 
@@ -142,10 +133,7 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
         // 清理 AVAudioEngine 相關
         stopAudioEngine()
         audioBufferQueue.removeAll()
-
-        // 清理 AVAudioPlayer 隊列
-        audioPlayerQueue.removeAll()
-        isRealTimePlaying = false
+        isPlayingBuffer = false
     }
 
     private func stopAudioEngine() {
@@ -293,7 +281,6 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
             if self.receivedChunks == 1 {
                 self.firstChunkDelay = Date().timeIntervalSince(self.streamStartTime ?? Date())
                 self.logger.info("首個音頻 chunk 收到 (AVAudioEngine)，延遲: \(self.firstChunkDelay) 秒")
-                self.isRealTimePlaying = true
                 self.playbackStatus = "正在串流播放..."
 
                 // 啟動音頻引擎
@@ -302,8 +289,8 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
 
             self.logger.info("處理第 \(self.receivedChunks) 個音頻 chunk (AVAudioEngine)，大小: \(audioData.count) bytes")
 
-            // 轉換為 PCMBuffer 並加入隊列 - AVAudioEngine 版本
-            self.convertToPCMBuffer(audioData)
+            // 直接創建 PCMBuffer 並加入隊列
+            self.createAndQueuePCMBuffer(from: audioData)
         }
     }
 
@@ -323,149 +310,42 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
         }
     }
 
-    private func convertToPCMBuffer(_ audioData: Data) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+    private func createAndQueuePCMBuffer(from audioData: Data) {
+        guard let format = audioFormat else { return }
 
-            // 直接從 Minimax API 嘅 PCM 數據創建 AVAudioPCMBuffer
-            let format = AVAudioFormat(standardFormatWithSampleRate: 32000, channels: 1)!
-
-            // PCM 數據每個樣本 2 bytes (16-bit)，單聲道 = 2 bytes per frame
-            let frameCount = AVAudioFrameCount(audioData.count) / 2
-            let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
-
-            // 直接將 Int16 PCM 數據轉換為 Float32 - 單聲道，冇需要複雜處理
-            audioData.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) in
-                guard let int16Pointer = rawBufferPointer.baseAddress?.assumingMemoryBound(to: Int16.self) else { return }
-
-                let floatData = pcmBuffer.floatChannelData![0]  // 單聲道，只用第一個聲道
-                let sampleCount = Int(frameCount)
-
-                for i in 0..<sampleCount {
-                    floatData[i] = Float(int16Pointer[i]) / Float(Int16.max)
-                }
-            }
-
-            pcmBuffer.frameLength = frameCount
-
-            self.logger.info("成功創建 PCM 緩衝區: \(frameCount) 幀，格式: \(format.sampleRate)Hz, \(format.channelCount)通道")
-
-            // 加入隊列並播放
-            self.audioBufferQueue.append(pcmBuffer)
-            self.playNextBuffer()
-        }
-    }
-
-    // 直接播放原始音頻數據，使用 AVAudioPlayer 串流
-    private func playRawAudioData(_ audioData: Data) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            self.logger.info("使用 AVAudioPlayer 播放音頻 chunk")
-
-            do {
-                let tempFileURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_audio_\(Date().timeIntervalSince1970).mp3")
-                try audioData.write(to: tempFileURL)
-
-                let player = try AVAudioPlayer(contentsOf: tempFileURL)
-                player.delegate = self
-
-                // 加入播放隊列
-                self.audioPlayerQueue.append(player)
-                self.logger.info("音頻 chunk 加入隊列，當前隊列長度: \(self.audioPlayerQueue.count)")
-
-                // 如果冇播放器在運行，開始播放
-                if !self.isRealTimePlaying {
-                    self.playNextAudioChunk()
-                }
-
-                // 清理臨時文件
-                DispatchQueue.global().asyncAfter(deadline: .now() + TimeInterval(player.duration + 1.0)) {
-                    try? FileManager.default.removeItem(at: tempFileURL)
-                }
-
-            } catch {
-                self.logger.error("AVAudioPlayer 播放失敗: \(error)")
-            }
-        }
-    }
-
-    // 播放下一个音頻 chunk
-    private func playNextAudioChunk() {
-        guard !audioPlayerQueue.isEmpty else {
-            self.logger.info("音頻播放隊列為空")
-            self.isRealTimePlaying = false
+        // PCM 數據每個樣本 2 bytes (16-bit)，單聲道 = 2 bytes per frame
+        let frameCount = AVAudioFrameCount(audioData.count) / 2
+        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            logger.error("創建 PCM 緩衝區失敗")
             return
         }
 
-        let player = audioPlayerQueue.removeFirst()
-        self.isRealTimePlaying = true
-        player.play()
-        self.logger.info("開始播放音頻 chunk，剩餘隊列: \(self.audioPlayerQueue.count)")
-    }
+        // 直接將 Int16 PCM 數據轉換為 Float32
+        audioData.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) in
+            guard let int16Pointer = rawBufferPointer.baseAddress?.assumingMemoryBound(to: Int16.self) else { return }
 
-    // 重新配置 AVAudioEngine 以使用新的音頻格式
-    private func reconfigureAudioEngine(with format: AVAudioFormat) {
-        guard let engine = audioEngine, let player = playerNode, let mixer = mixer else {
-            logger.error("音頻引擎組件未初始化")
-            return
-        }
+            let floatData = pcmBuffer.floatChannelData![0]  // 單聲道
+            let sampleCount = Int(frameCount)
 
-        // 如果引擎正在運行，先停止
-        if engine.isRunning {
-            engine.stop()
-        }
-
-        // 斷開現有連接
-        engine.disconnectNodeInput(player)
-        engine.disconnectNodeInput(mixer)
-        engine.disconnectNodeOutput(player)
-        engine.disconnectNodeOutput(mixer)
-
-        // 更新音頻格式
-        audioFormat = format
-
-        // 使用新的音頻格式重新連接
-        engine.connect(player, to: mixer, format: format)
-        engine.connect(mixer, to: engine.mainMixerNode, format: format)
-
-        // 重新啟動引擎
-        do {
-            try engine.start()
-            logger.info("AVAudioEngine 重新配置成功，新格式: \(format.sampleRate)Hz, \(format.channelCount)通道")
-        } catch {
-            logger.error("AVAudioEngine 重新啟動失敗: \(error)")
-        }
-    }
-
-    // 回退到 AVAudioPlayer 播放
-    private func fallbackToAVAudioPlayer(_ audioData: Data) {
-        DispatchQueue.main.async { [weak self] in
-            self?.logger.info("回退到 AVAudioPlayer 播放")
-
-            do {
-                let tempFileURL = FileManager.default.temporaryDirectory.appendingPathComponent("fallback_audio_\(Date().timeIntervalSince1970).mp3")
-                try audioData.write(to: tempFileURL)
-
-                let player = try AVAudioPlayer(contentsOf: tempFileURL)
-                self?.audioPlayer = player
-                player.delegate = self
-                player.play()
-
-                // 清理臨時文件
-                DispatchQueue.global().asyncAfter(deadline: .now() + TimeInterval(player.duration + 1.0)) {
-                    try? FileManager.default.removeItem(at: tempFileURL)
-                }
-
-            } catch {
-                self?.logger.error("AVAudioPlayer 回退也失敗: \(error)")
+            for i in 0..<sampleCount {
+                floatData[i] = Float(int16Pointer[i]) / Float(Int16.max)
             }
         }
+
+        pcmBuffer.frameLength = frameCount
+
+        logger.info("創建 PCM 緩衝區: \(frameCount) 幀")
+
+        // 加入隊列並播放
+        audioBufferQueue.append(pcmBuffer)
+        playNextBuffer()
     }
 
+  
     private func playNextBuffer() {
         guard !audioBufferQueue.isEmpty else {
             self.logger.warning("音頻緩衝區隊列為空")
+            isPlayingBuffer = false
             return
         }
 
@@ -489,73 +369,22 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
         // 確保播放節點運行
         if !player.isPlaying {
             player.play()
-            self.isPlayingBuffer = true
+            isPlayingBuffer = true
             self.logger.info("AVAudioPlayerNode 開始播放")
         }
 
-        // 設置音量
-        player.volume = 1.0
-
         // 取出第一個 buffer 進行播放
-        let firstBuffer = audioBufferQueue.removeFirst()
-        self.logger.info("播放音頻緩衝區: \(firstBuffer.frameLength) 幀，格式: \(firstBuffer.format.sampleRate)Hz, \(firstBuffer.format.channelCount)通道，隊列剩餘: \(self.audioBufferQueue.count)")
-
-        // 檢查格式是否需要重新配置
-        if let currentFormat = self.audioFormat {
-            if firstBuffer.format.sampleRate != currentFormat.sampleRate || firstBuffer.format.channelCount != currentFormat.channelCount {
-                self.logger.warning("音頻格式改變，重新配置引擎")
-                self.reconfigureAudioEngine(with: firstBuffer.format)
-            }
-        }
+        let buffer = audioBufferQueue.removeFirst()
+        self.logger.info("播放音頻緩衝區: \(buffer.frameLength) 幀，隊列剩餘: \(self.audioBufferQueue.count)")
 
         // 安排播放
-        player.scheduleBuffer(firstBuffer, at: nil, options: [], completionHandler: { [weak self] in
+        player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: { [weak self] in
             DispatchQueue.main.async {
                 self?.logger.info("音頻緩衝區播放完成")
                 // 播完當前 buffer 後，立即播放下一個
-                if let self = self {
-                    if !self.audioBufferQueue.isEmpty {
-                        self.playNextBuffer()
-                    } else {
-                        self.isPlayingBuffer = false
-                        self.logger.info("所有音頻播放完成")
-                    }
-                }
+                self?.playNextBuffer()
             }
         })
-    }
-
-    // 安排新收到嘅 buffer（當播放節點已經運行時）
-    // 修復：移除呢個方法，避免重複安排播放
-    // 所有播放都統一透過 playNextBuffer 處理
-
-    // 檢查隊列是否播放完成
-    private func checkPlaybackComplete() {
-        if audioBufferQueue.isEmpty && !isPlayingBuffer {
-            self.logger.info("所有音頻緩衝區播放完成")
-            self.isPlayingBuffer = false
-        }
-    }
-
-    // 確保音頻引擎格式匹配
-    private func ensureEngineFormatMatch(bufferFormat: AVAudioFormat) {
-        guard let audioEngine = audioEngine, let playerNode = playerNode, let mixer = mixer else { return }
-
-        // 如果格式唔匹配，重新連接
-        if audioFormat?.sampleRate != bufferFormat.sampleRate || audioFormat?.channelCount != bufferFormat.channelCount {
-            logger.info("音頻格式不匹配，重新連接引擎: \(bufferFormat.sampleRate)Hz, \(bufferFormat.channelCount)通道")
-
-            // 斷開原有連接
-            audioEngine.disconnectNodeInput(playerNode)
-            audioEngine.disconnectNodeInput(mixer)
-
-            // 更新格式
-            audioFormat = bufferFormat
-
-            // 重新連接
-            audioEngine.connect(playerNode, to: mixer, format: bufferFormat)
-            audioEngine.connect(mixer, to: audioEngine.mainMixerNode, format: bufferFormat)
-        }
     }
 
     // MARK: - 輔助方法
@@ -602,7 +431,6 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
                     do {
                         let player = try AVAudioPlayer(contentsOf: tempFileURL)
                         self?.audioPlayer = player
-                        player.delegate = self
                         player.play()
 
                         DispatchQueue.global().asyncAfter(deadline: .now() + TimeInterval(player.duration + 1.0)) {
@@ -617,23 +445,6 @@ class MinimaxAVEngineStreamManager: NSObject, ObservableObject, AVAudioPlayerDel
             } catch {
                 self?.logger.error("音頻文件處理失敗: \(error)")
             }
-        }
-    }
-
-    // MARK: - AVAudioPlayerDelegate
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        DispatchQueue.main.async {
-            self.logger.info("音頻播放完成: \(flag ? "成功" : "失敗")")
-            // 播放完成後，播放下一個 chunk
-            self.playNextAudioChunk()
-        }
-    }
-
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        DispatchQueue.main.async {
-            let errorMsg = "音頻解碼錯誤: \(error?.localizedDescription ?? "未知錯誤")"
-            self.logger.error("\(errorMsg)")
-            self.handleError(errorMsg)
         }
     }
 }
