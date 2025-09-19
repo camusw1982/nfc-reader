@@ -20,6 +20,7 @@ struct NFCReaderView: View {
     @State private var showValidationAlert = false
     @State private var httpAPIConnected = false
     @State private var characterData: [String: Any]?
+    @State private var currentConnectionId: String = ""
     
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "NFCReaderView")
     private var httpManager: HTTPManager {
@@ -256,6 +257,63 @@ struct NFCReaderView: View {
         logger.info("📡 開始 NFC 讀取")
         nfcManager.startReading()
     }
+
+    // MARK: - Connection ID Management
+
+    private func getNewConnectionId(characterId: Int, completion: @escaping (String?) -> Void) {
+        logger.info("🔗 請求新 connection_id，character_id: \(characterId)")
+
+        let url = URL(string: "http://145.79.12.177:10000/api/session/new")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = ["character_id": characterId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                self.logger.error("❌ 獲取 connection_id 失敗: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+                return
+            }
+
+            guard let data = data else {
+                self.logger.error("❌ 獲取 connection_id 時沒有收到數據")
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let success = json["success"] as? Bool,
+                   success,
+                   let connectionId = json["connection_id"] as? String {
+                    self.logger.info("✅ 成功獲取 connection_id: \(connectionId)")
+                    DispatchQueue.main.async {
+                        completion(connectionId)
+                    }
+                } else {
+                    self.logger.error("❌ connection_id 響應格式錯誤")
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        self.logger.error("❌ 響應內容: \(jsonString)")
+                    }
+                    DispatchQueue.main.async {
+                        completion(nil)
+                    }
+                }
+            } catch {
+                self.logger.error("❌ 解析 connection_id 響應失敗: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+            }
+        }.resume()
+    }
     
         
     // MARK: - Character ID 驗證
@@ -303,16 +361,38 @@ struct NFCReaderView: View {
                 if isValid {
                     self.validationMessage = "✅ 成功招魂！"
                     self.characterData = characterData
-                    self.logger.info("✅ Character ID \(id) 驗證成功，準備跳轉到 LandingPageView")
-                    
+                    self.logger.info("✅ Character ID \(id) 驗證成功，正在獲取新會話...")
+
                     // 記錄 character 數據
                     if let data = characterData {
                         self.logger.info("📋 Character 數據: \(data)")
                     }
-                    
-                    // 延遲一秒讓用戶看到成功消息
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        self.showLandingPage = true
+
+                    // 獲取新 connection_id
+                    guard let characterIdInt = Int(id) else {
+                        self.validationMessage = "❌ Character ID 格式錯誤"
+                        self.showValidationAlert = true
+                        return
+                    }
+
+                    self.getNewConnectionId(characterId: characterIdInt) { connectionId in
+                        if let connectionId = connectionId {
+                            // 儲存 connection_id
+                            self.currentConnectionId = connectionId
+                            self.logger.info("✅ 新會話已建立，connection_id: \(connectionId)")
+
+                            // 設置到 HTTPManager
+                            HTTPManager.shared.setConnectionId(connectionId)
+
+                            // 延遲一秒讓用戶看到成功消息
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                self.showLandingPage = true
+                            }
+                        } else {
+                            self.validationMessage = "❌ 無法建立新會話"
+                            self.logger.error("❌ 獲取 connection_id 失敗")
+                            self.showValidationAlert = true
+                        }
                     }
                 } else {
                     self.validationMessage = "❌ Character ID 驗證失敗"
@@ -358,6 +438,7 @@ struct NFCReaderView: View {
         characterData = nil
         isValidatingID = false
         showValidationAlert = false
+        currentConnectionId = ""
         logger.info("🧹 已清除所有舊資訊")
     }
     

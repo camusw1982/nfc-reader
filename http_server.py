@@ -62,7 +62,11 @@ feishu_service = CachedFeishuService()
 set_feishu_service(feishu_service)
 
 # Initialize Gemini service with shared Feishu service
-gemini_service = GeminiService()
+gemini_service = GeminiService(feishu_service=feishu_service)
+
+# Preload all character data on startup to avoid delays
+logger.info("🚀 Preloading all character data on startup...")
+gemini_service.preload_character_data()
 
 # In-memory storage for demo purposes
 # In production, use a proper database
@@ -75,7 +79,7 @@ class ChatRequest(BaseModel):
     text: str
     character_id: Optional[int] = None
     streaming: Optional[bool] = False
-    connection_id: Optional[str] = None
+    connection_id: str
 
 class ChatResponse(BaseModel):
     response: str
@@ -85,6 +89,7 @@ class ChatResponse(BaseModel):
     success: bool
     error: Optional[str] = None
     timestamp: Optional[str] = None
+    connection_id: Optional[str] = None
 
 class CharacterRequest(BaseModel):
     character_id: int
@@ -105,6 +110,14 @@ class PingResponse(BaseModel):
     success: bool
     message: str
     timestamp: str
+
+class NewSessionResponse(BaseModel):
+    connection_id: str
+    character_id: int
+    character_name: str
+    success: bool
+    message: str
+    error: Optional[str] = None
 
 class HistoryResponse(BaseModel):
     messages: List[Dict[str, Any]]
@@ -192,6 +205,41 @@ async def ping():
         timestamp=datetime.now().isoformat()
     )
 
+@app.post("/api/session/new", response_model=NewSessionResponse)
+async def create_new_session(request: CharacterRequest):
+    """Create a new chat session (for new NFC scan)"""
+    try:
+        # Generate new connection ID
+        connection_id = str(uuid.uuid4())
+
+        # Create new session
+        session = get_or_create_session(connection_id)
+        session["character_id"] = request.character_id
+
+        # Get character info
+        character_name = get_character_name(request.character_id)
+
+        logger.info(f"✅ New session created: {connection_id} for character {character_name}")
+
+        return NewSessionResponse(
+            connection_id=connection_id,
+            character_id=request.character_id,
+            character_name=character_name,
+            success=True,
+            message=f"New session started for {character_name}"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to create new session: {str(e)}")
+        return NewSessionResponse(
+            connection_id="",
+            character_id=request.character_id,
+            character_name="Error",
+            success=False,
+            message="Failed to create new session",
+            error=str(e)
+        )
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Main chat endpoint for LLM queries"""
@@ -216,15 +264,19 @@ async def chat(request: ChatRequest):
         
         # Get or create session
         if request.connection_id:
+            # Use existing session
             session = get_or_create_session(request.connection_id)
             if request.character_id:
                 session["character_id"] = request.character_id
+            current_connection_id = request.connection_id
         else:
-            # Generate temporary session ID
-            temp_id = str(uuid.uuid4())
-            session = get_or_create_session(temp_id)
-            if request.character_id:
-                session["character_id"] = request.character_id
+            # No connection_id provided - this is required
+            logger.error("❌ No connection_id provided in chat request")
+            return ChatResponse(
+                response="",
+                success=False,
+                error="connection_id is required for chat"
+            )
         
         # Store user message
         user_message = {
@@ -237,22 +289,20 @@ async def chat(request: ChatRequest):
         
         # Generate LLM response
         if request.type in ["text", "gemini_chat"]:
-            logger.info(f"🔍 DEBUG: request.character_id = {request.character_id}")
-            logger.info(f"🔍 DEBUG: gemini_service current character BEFORE = {gemini_service.get_current_character_id()}")
-            
-            # 強制更新 Gemini Service 嘅當前角色
+            # Update Gemini Service character if needed
             if request.character_id and request.character_id != gemini_service.get_current_character_id():
-                logger.info(f"🔧 DEBUG: Force updating gemini_service character from {gemini_service.get_current_character_id()} to {request.character_id}")
                 gemini_service.set_character(request.character_id)
             
-            logger.info(f"🔍 DEBUG: gemini_service current character AFTER = {gemini_service.get_current_character_id()}")
-            
+            logger.info(f"🚀 Starting LLM request for: {request.text[:50]}...")
+
             response_text = await gemini_service.send_message(
-                message=request.text, 
-                include_context=True, 
+                message=request.text,
+                include_context=True,
                 character_id=request.character_id
             )
-            
+
+            logger.info(f"✅ LLM response received: {response_text[:100]}...")
+
             # Get character info
             character_id = request.character_id or gemini_service.get_current_character_id()
             character_name = get_character_name(character_id)
@@ -273,7 +323,8 @@ async def chat(request: ChatRequest):
                 character_id=character_id,
                 character_name=character_name,
                 success=True,
-                timestamp=datetime.now().isoformat()
+                timestamp=datetime.now().isoformat(),
+                connection_id=current_connection_id
             )
             
         else:

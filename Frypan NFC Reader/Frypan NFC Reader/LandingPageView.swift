@@ -43,7 +43,7 @@ struct LandingPageView: View {
                 )
                 .frame(width: 340, height: 448)
                 .offset(x: -60, y: -200) // 設置具體的 x, y 位置
-                .blur(radius: 100)
+                .blur(radius: 120)
             
             Ellipse()
                 .fill(
@@ -57,8 +57,8 @@ struct LandingPageView: View {
                     )
                 )
                 .frame(width: 340, height: 448)
-                .offset(x: 150, y: 150) // 設置具體的 x, y 位置
-                .blur(radius: 100)
+                .offset(x: 180, y: 160) // 設置具體的 x, y 位置
+                .blur(radius: 120)
                 
             
             ZStack {
@@ -69,6 +69,7 @@ struct LandingPageView: View {
                     
                     // 對話區域 - 佔滿剩餘空間
                     ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
+                        .padding(.bottom, 10)
                 }
                 
                 // 底部覆蓋層 - 包含語音控制元素
@@ -86,16 +87,16 @@ struct LandingPageView: View {
                     
                     // 滑動控制區域
                     SlideControlsView(voiceManager: voiceManager)
-                    
+
                     // Talk 按鈕
                     TalkButtonView(
                         voiceManager: voiceManager,
                         speechRecognizer: speechRecognizer,
+                        httpManager: httpManager,
                         onStartRecording: startSpeechRecognition,
                         onStopRecording: stopSpeechRecognition,
                         onCancelRecording: cancelRecording,
-                        onConfirmRecording: confirmRecording,
-                        onStopSpeech: stopSpeech
+                        onConfirmRecording: confirmRecording
                     )
                     .padding(.horizontal, 100)
                     .padding(.vertical, 0)
@@ -116,16 +117,16 @@ struct LandingPageView: View {
                             goBackToNFCReader()
                         }) {
                             Image(systemName: "arrow.backward.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 40))
                                 .foregroundColor(.blue.opacity(0.8))
                                 .background(
                                     Circle()
                                         .fill(Color.white.opacity(0.1))
-                                        .frame(width: 40, height: 40)
+                                        .frame(width: 50, height: 50)
                                 )
                         }
                         .padding(.trailing, 20)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 0)
                     }
                 }
             }
@@ -191,10 +192,6 @@ struct LandingPageView: View {
             speechRecognizer: speechRecognizer,
             serviceManager: httpManager
         )
-    }
-    
-    private func stopSpeech() {
-        httpManager.stopAudio()
     }
     
     private func goBackToNFCReader() {

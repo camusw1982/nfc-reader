@@ -86,7 +86,8 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
     private var miniMaxStreamManager: MiniMaxStreamManager?
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "HTTP")
     private var connectionCheckTimer: Timer?
-    
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Initialization
     override init() {
         // HTTP 服務器地址
@@ -123,6 +124,23 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
         // 綁定音頻管理器的狀態到 HTTP 管理器
         audioManager.$isPlayingAudio
             .assign(to: &$isPlayingAudio)
+
+        // 監聽 MiniMaxStreamManager 嘅播放狀態
+        if let streamManager = miniMaxStreamManager {
+            streamManager.$isPlaying
+                .sink { [weak self] isStreamPlaying in
+                    DispatchQueue.main.async {
+                        // 如果 MiniMax 正喺播放，優先顯示佢嘅狀態
+                        if isStreamPlaying {
+                            self?.isPlayingAudio = true
+                        } else {
+                            // 如果 MiniMax 冇播放，使用 AudioManager 嘅狀態
+                            self?.isPlayingAudio = self?.audioManager.isPlayingAudio ?? false
+                        }
+                    }
+                }
+                .store(in: &cancellables)
+        }
     }
     
     private func setupMiniMaxStreamManager() {
@@ -135,6 +153,9 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
         // 初始化 MiniMax 串流管理器
         self.miniMaxStreamManager = MiniMaxStreamManager()
         logger.info("MiniMax 串流管理器已初始化")
+
+        // 重新設置音頻綁定以包含 MiniMaxStreamManager
+        setupAudioBinding()
     }
     
     private func checkConnection() {
@@ -493,7 +514,15 @@ extension HTTPManager {
 extension HTTPManager {
     
     func stopAudio() {
+        logger.info("🛑 停止所有音頻播放")
+
+        // 停止 MiniMax 串流管理器
+        miniMaxStreamManager?.stopStreaming()
+        logger.info("✅ MiniMax 串流管理器已停止")
+
+        // 停止音頻管理器
         audioManager.stopAudio()
+        logger.info("✅ 音頻管理器已停止")
     }
     
     func setCharacter_id(_ character_id: Int) {
@@ -510,5 +539,17 @@ extension HTTPManager {
     
     func getCurrentCharacter_id() -> Int {
         return currentCharacter_id
+    }
+
+    func setConnectionId(_ connectionId: String) {
+        DispatchQueue.main.async {
+            print("🔗 HTTPManager 接收到 connection_id 設置: \(connectionId)")
+            self.connectionId = connectionId
+            print("✅ HTTPManager 已更新 connection_id 為: \(self.connectionId)")
+        }
+    }
+
+    func getConnectionId() -> String {
+        return connectionId
     }
 }

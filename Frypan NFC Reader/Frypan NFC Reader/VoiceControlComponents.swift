@@ -12,13 +12,13 @@ import AVFoundation
 struct TalkButtonView: View {
     @ObservedObject var voiceManager: VoiceControlManager
     @ObservedObject var speechRecognizer: SpeechRecognizer
+    @ObservedObject var httpManager: HTTPManager
     @State private var pulseScale: CGFloat = 1.0
     @State private var pulseOpacity: Double = 0.6
     let onStartRecording: () -> Void
     let onStopRecording: () -> Void
     let onCancelRecording: () -> Void
     let onConfirmRecording: () -> Void
-    let onStopSpeech: () -> Void
     
     var body: some View {
         Button(action: {
@@ -83,8 +83,8 @@ struct TalkButtonView: View {
         
         if !speechRecognizer.isRecognizing {
             print("🎤 開始語音識別")
-            // 先停止語音播放
-            onStopSpeech()
+            // 先停止語音播放（與底部停止圖標相同）
+            httpManager.stopAudio()
             // 清空之前的識別文本
             speechRecognizer.recognizedText = ""
             onStartRecording()
@@ -220,7 +220,7 @@ struct SpeechRecognitionStatusView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
-                    .background(Color.blue.opacity(0.2))
+                    .background(Color.blue.opacity(0.7))
                     .cornerRadius(8)
             }
             .padding(.bottom, 8)
