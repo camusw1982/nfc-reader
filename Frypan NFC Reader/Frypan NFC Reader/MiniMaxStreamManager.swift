@@ -25,10 +25,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     private var urlSessionTask: URLSessionTask?
     private var isProcessing = false
     private var streamStartTime: Date?
-    private var firstChunkTime: Date?
 
-    // 音頻播放器 - 基本模式用（保留向下兼容）
-    private var audioPlayer: AVAudioPlayer?
 
     // AVAudioEngine 相關
     private var audioEngine: AVAudioEngine?
@@ -39,7 +36,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     private var audioBufferQueue: [AVAudioPCMBuffer] = []
     private var isPlayingBuffer = false
 
-    // 配置 - 參考現有嘅MinimaxStreamAVEngineView 成功版本
+    // 配置
     private let groupId: String
     private let apiKey: String
     private let baseURL = "https://api.minimaxi.chat/v1/t2a_v2"
@@ -60,7 +57,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .default, options: [])
             try audioSession.setActive(true)
-            logger.info("音頻會話設置成功 (MiniMaxStreamManager)")
+            logger.info("音頻會話設置成功")
         } catch {
             logger.error("音頻會話設置失敗: \(error)")
             self.errorMessage = "音頻會話設置失敗: \(error.localizedDescription)"
@@ -135,7 +132,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             self.streamStartTime = Date()
             self.playbackStatus = "正在發送請求..."
 
-            // 使用真正嘅 SSE 串流，跟隨 MinimaxStreamAVEngineView 成功版本
+            // 使用 SSE 串流
             self.sendSSEStreamingRequest(text, voiceId: voiceId, speed: speed, pitch: pitch, emotion: emotion)
         }
     }
@@ -146,10 +143,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         isPlaying = false
         urlSessionTask?.cancel()
         urlSessionTask = nil
-
-        // 停止基本模式播放器
-        audioPlayer?.stop()
-        audioPlayer = nil
 
         // 停止 AVAudioEngine
         stopAudioEngine()
@@ -167,7 +160,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         receivedChunks = 0
         firstChunkDelay = 0
         totalChunksTime = 0
-        firstChunkTime = nil
         streamStartTime = nil
 
         // 重置狀態
@@ -178,13 +170,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         // 停止現有任務
         urlSessionTask?.cancel()
         urlSessionTask = nil
-
-        // 停止基本模式播放器
-        audioPlayer?.stop()
-        audioPlayer = nil
-
-        // 清理基本模式音頻塊
-        audioChunks.removeAll()
 
         // 清理 AVAudioEngine 相關
         reinitializeAudioEngine()
@@ -218,7 +203,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         isPlayingBuffer = false
     }
 
-    // MARK: - SSE 串流方法 - 跟隨 MinimaxStreamAVEngineView 成功版本
+    // MARK: - SSE 串流方法
     private func sendSSEStreamingRequest(_ text: String, voiceId: String, speed: Float, pitch: Int, emotion: String) {
         guard let url = URL(string: "\(baseURL)?GroupId=\(groupId)") else {
             logger.error("無效的 API URL")
@@ -226,7 +211,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             return
         }
 
-        logger.info("正在發送 SSE 串流 API 請求 (MiniMaxStreamManager)...")
+        logger.info("正在發送 SSE 串流 API 請求...")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -275,7 +260,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
                 return
             }
 
-            // 處理 SSE 響應 - 跟隨 MinimaxStreamAVEngineView 成功版本
+            // 處理 SSE 響應
             self?.handleSSEResponse(data)
         }
 
@@ -285,9 +270,9 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     // MARK: - SSE 處理 - 跟隨 MinimaxStreamAVEngineView 成功版本
     private func handleSSEResponse(_ data: Data) {
         let responseString = String(data: data, encoding: .utf8) ?? ""
-        logger.info("收到 SSE 響應 (MiniMaxStreamManager)，長度: \(responseString.count)")
+        logger.info("收到 SSE 響應，長度: \(responseString.count)")
 
-        // 解析 SSE 格式：data: {...}\n\n - 跟隨 MinimaxStreamAVEngineView 成功版本
+        // 解析 SSE 格式：data: {...}\n\n
         let events = responseString.components(separatedBy: "\n\n")
 
         for event in events {
@@ -302,14 +287,14 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             // 標記 SSE 處理完成，但播放狀態由音頻隊列決定
             self.logger.info("SSE 串流處理完成，共接收 \(self.receivedChunks) 個 chunk")
 
-            // SSE 串流完成，標記處理結束，讓音頻隊列決定何時真正完成播放
+            // SSE 串流完成，標記處理結束
             self.isProcessing = false
-            self.logger.info("SSE 串流處理完成，isProcessing 已設置為 false")
+            self.logger.info("SSE 串流處理完成")
         }
     }
 
     private func processSSEEvent(_ event: String) {
-        // 提取 data: 後面嘅 JSON 內容 - 跟隨 MinimaxStreamAVEngineView 成功版本
+        // 提取 data: 後面嘅 JSON 內容
         guard let dataRange = event.range(of: "data: ") else { return }
         let jsonString = String(event[dataRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -329,7 +314,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             return
         }
 
-        // 處理音頻數據 - 跟隨 MinimaxStreamAVEngineView 成功版本
+        // 處理音頻數據
         guard let dataField = json["data"] as? [String: Any],
               let status = dataField["status"] as? Int,
               let audioHex = dataField["audio"] as? String,
@@ -338,7 +323,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             return
         }
 
-        // 只有 status = 1 先有音頻數據 - 跟隨 MinimaxStreamAVEngineView 成功版本
+        // 只有 status = 1 先有音頻數據
         guard status == 1 else { return }
 
         // 轉換 hex 音頻數據
@@ -347,26 +332,26 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             return
         }
 
-        // 處理音頻 chunk - 跟隨 MinimaxStreamAVEngineView 成功版本
+        // 處理音頻 chunk
         processAudioChunk(audioData)
     }
 
-    // MARK: - 音頻處理 - AVAudioEngine 版本
+    // MARK: - 音頻處理
     private func processAudioChunk(_ audioData: Data) {
         DispatchQueue.main.async {
             self.receivedChunks += 1
 
-            // 記錄首個 chunk 延遲 - 跟隨 MinimaxStreamAVEngineView 成功版本
+            // 記錄首個 chunk 延遲
             if self.receivedChunks == 1 {
                 self.firstChunkDelay = Date().timeIntervalSince(self.streamStartTime ?? Date())
-                self.logger.info("首個音頻 chunk 收到 (MiniMaxStreamManager)，延遲: \(self.firstChunkDelay) 秒")
+                self.logger.info("首個音頻 chunk 收到，延遲: \(self.firstChunkDelay) 秒")
                 self.playbackStatus = "正在串流播放..."
 
                 // 啟動音頻引擎
                 self.startAudioEngine()
             }
 
-            self.logger.info("處理第 \(self.receivedChunks) 個音頻 chunk (MiniMaxStreamManager)，大小: \(audioData.count) bytes")
+            self.logger.debug("處理第 \(self.receivedChunks) 個音頻 chunk，大小: \(audioData.count) bytes")
 
             // 直接創建 PCMBuffer 並加入隊列
             self.createAndQueuePCMBuffer(from: audioData)
@@ -476,12 +461,12 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         // 取出第一個 buffer 進行播放
         let buffer = audioBufferQueue.removeFirst()
-        self.logger.info("播放音頻緩衝區: \(buffer.frameLength) 幀，隊列剩餘: \(self.audioBufferQueue.count)")
+        self.logger.debug("播放音頻緩衝區: \(buffer.frameLength) 幀，隊列剩餘: \(self.audioBufferQueue.count)")
 
         // 安排播放
         player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: { [weak self] in
             DispatchQueue.main.async {
-                self?.logger.info("音頻緩衝區播放完成")
+                self?.logger.debug("音頻緩衝區播放完成")
                 // 播完當前 buffer 後，立即播放下一個
                 self?.playNextBuffer()
             }
@@ -540,34 +525,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         }
     }
 
-    // 基本模式音頻處理 (保持向下兼容)
-    private var audioChunks: [Data] = []
-    private func playAudio(_ audioData: Data) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            do {
-                let tempFileURL = FileManager.default.temporaryDirectory.appendingPathComponent("audio_\(Date().timeIntervalSince1970).mp3")
-                try audioData.write(to: tempFileURL)
-
-                DispatchQueue.main.async {
-                    do {
-                        let player = try AVAudioPlayer(contentsOf: tempFileURL)
-                        self?.audioPlayer = player
-                        player.play()
-
-                        DispatchQueue.global().asyncAfter(deadline: .now() + TimeInterval(player.duration + 1.0)) {
-                            try? FileManager.default.removeItem(at: tempFileURL)
-                        }
-
-                    } catch {
-                        self?.logger.error("音頻播放失敗: \(error)")
-                    }
-                }
-
-            } catch {
-                self?.logger.error("音頻文件處理失敗: \(error)")
-            }
-        }
-    }
 
     // MARK: - Cleanup
     deinit {

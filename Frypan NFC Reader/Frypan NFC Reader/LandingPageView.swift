@@ -34,7 +34,7 @@ struct LandingPageView: View {
                 .fill(
                     LinearGradient(
                         stops: [
-                            Gradient.Stop(color: Color(red: 0.12, green: 0.24, blue: 0.59), location: 0.00),
+                            Gradient.Stop(color: Color(red: 0.22, green: 0.34, blue: 0.69), location: 0.00),
                             Gradient.Stop(color: .black.opacity(0), location: 1.00),
                         ],
                         startPoint: UnitPoint(x: 0.5, y: 0),
@@ -49,7 +49,7 @@ struct LandingPageView: View {
                 .fill(
                     LinearGradient(
                         stops: [
-                            Gradient.Stop(color: Color(red: 0.41, green: 0.28, blue: 0.07), location: 0.00),
+                            Gradient.Stop(color: Color(red: 0.51, green: 0.38, blue: 0.17), location: 0.00),
                             Gradient.Stop(color: .black.opacity(0), location: 1.00),
                         ],
                         startPoint: UnitPoint(x: 0.5, y: 0),
