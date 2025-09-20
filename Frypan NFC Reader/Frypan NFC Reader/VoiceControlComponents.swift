@@ -34,9 +34,22 @@ struct TalkButtonView: View {
                 
                 // 主按鈕
                 Circle()
-                    .fill(voiceManager.isPressingTalkButton ? 
-                          (voiceManager.slideOffset < -50 ? Color.red : 
-                            voiceManager.slideOffset > 50 ? Color.green : Color.gray) : Color.blue.opacity(0.6))
+                    .fill(
+                        voiceManager.isPressingTalkButton ?
+                          AnyShapeStyle(
+                            voiceManager.slideOffset < -50 ? AnyShapeStyle(Color.red) :
+                            voiceManager.slideOffset > 50 ? AnyShapeStyle(Color.green) : AnyShapeStyle(Color.gray)
+                          ) : AnyShapeStyle(
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.blue.opacity(0.8), location: 0.0),
+                                    .init(color: Color.blue.opacity(0.4), location: 1.0)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    )
                     .frame(width: 90, height: 90)
                     .animation(.easeInOut(duration: 0.1), value: voiceManager.slideOffset)
                     .animation(.easeInOut(duration: 0.1), value: voiceManager.isPressingTalkButton)
@@ -44,7 +57,7 @@ struct TalkButtonView: View {
                 
                 // 麥克風圖標
                 Image(systemName: speechRecognizer.isRecognizing ? "microphone.fill" : "microphone.fill")
-                    .font(.system(size: 32, weight: .regular))
+                    .font(.system(size: 30, weight: .regular))
                     .foregroundColor(.white)
                     .scaleEffect(voiceManager.isPressingTalkButton ? 0.9 : 1.0)
             }

@@ -14,13 +14,40 @@ struct ChatMessage: Identifiable, Codable {
     let isUser: Bool
     let timestamp: Date
     let isError: Bool
-    
-    init(text: String, isUser: Bool, timestamp: Date = Date(), isError: Bool = false) {
+    let isLoading: Bool
+
+    init(text: String, isUser: Bool, timestamp: Date = Date(), isError: Bool = false, isLoading: Bool = false) {
         self.id = UUID()
         self.text = text
         self.isUser = isUser
         self.timestamp = timestamp
         self.isError = isError
+        self.isLoading = isLoading
+    }
+}
+
+// MARK: - Loading Animation View
+struct LoadingAnimationView: View {
+    @State private var animationScale: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.gray.opacity(0.7))
+                    .frame(width: 8, height: 8)
+                    .scaleEffect(animationScale ? 0.6 : 1)
+                    .animation(
+                        Animation.easeInOut(duration: 0.6)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.2),
+                        value: animationScale
+                    )
+            }
+        }
+        .onAppear {
+            animationScale = true
+        }
     }
 }
 
@@ -59,13 +86,13 @@ struct UserBubbleView: View {
                     .padding(.vertical, 12)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.9)]),
+                            gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.6)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .cornerRadius(20)
-                    .shadow(color: .blue.opacity(0.3), radius: 2, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 2, y: 2)
             }
         }
     }
@@ -81,7 +108,8 @@ struct UserBubbleView: View {
 struct AIBubbleView: View {
     let message: ChatMessage
     @StateObject private var httpManager = HTTPManager.shared
-    
+    @State private var isAnimating = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -95,22 +123,38 @@ struct AIBubbleView: View {
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.6))
             }
-            
+
             HStack {
-                Text(message.text)
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.gray.opacity(0.4), Color.gray.opacity(0.2)]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if message.isLoading {
+                    // Loading 動畫
+                    LoadingAnimationView()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.2)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .cornerRadius(20)
-                    .shadow(color: .gray.opacity(0.2), radius: 2, x: 0, y: 2)
+                        .cornerRadius(20)
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 2, y: 2)
+                } else {
+                    Text(message.text)
+                        .font(.body)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.2)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .cornerRadius(20)
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 2, y: 2)
+                }
             }
         }
     }

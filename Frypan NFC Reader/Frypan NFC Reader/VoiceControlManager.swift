@@ -117,7 +117,9 @@ class VoiceControlManager: ObservableObject {
             print("📤 準備發送文本到服務器: '\(recognizedText)'")
             
             // 立即發送到服務器進行語音合成
-            serviceManager?.sendTextToSpeech(text: recognizedText, character_id: nil)
+            Task {
+                await serviceManager?.sendTextToSpeech(text: recognizedText, character_id: nil)
+            }
             
             // 成功確認的震動反饋
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)

@@ -25,10 +25,14 @@ struct LandingPageView: View {
     
     var body: some View {
         ZStack {
-            // 背景
-            Color(red: 0.08, green: 0.08, blue: 0.08)
+            Color(red: 0.07, green: 0.07, blue: 0.07)
                 .ignoresSafeArea()
-            
+            BeautifulMechGradient()
+              
+            // 背景
+            /* Color(red: 0.08, green: 0.08, blue: 0.08)
+             .ignoresSafeArea()
+                
             // 背景橢圓形顏色塊與漸變效果
             Ellipse()
                 .fill(
@@ -58,7 +62,7 @@ struct LandingPageView: View {
                 )
                 .frame(width: 340, height: 448)
                 .offset(x: 180, y: 160) // 設置具體的 x, y 位置
-                .blur(radius: 120)
+                .blur(radius: 120) */
                 
             
             ZStack {
@@ -69,8 +73,9 @@ struct LandingPageView: View {
                     
                     // 對話區域 - 佔滿剩餘空間
                     ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
+                    
                     // 對話與Talk按鈕之間的間距
-                        .padding(.bottom, 8)
+                    .padding(.bottom, 8)
                 }
                 
                 // 底部覆蓋層 - 包含語音控制元素

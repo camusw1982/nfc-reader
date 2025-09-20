@@ -82,7 +82,8 @@ struct HTTPCharacterRequest: Codable {
 }
 
 // MARK: - HTTP Manager
-class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
+@MainActor
+class HTTPManager: NSObject, ObservableObject, ServiceProtocol, @unchecked Sendable {
     
     // MARK: - Shared Instance
     static let shared = HTTPManager()
@@ -101,7 +102,8 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
         }
     }
     @Published var characterName: String = "Unknown Character"
-    
+    @Published var isLoading: Bool = false
+
     // MARK: - Speech Recognizer Reference
     weak var speechRecognizer: SpeechRecognizer?
     
@@ -139,8 +141,8 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
     }
     
     deinit {
-        disconnect()
         connectionCheckTimer?.invalidate()
+        // Note: disconnect() cannot be called safely from deinit due to self capture
     }
     
     // MARK: - Setup Methods
@@ -216,7 +218,9 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
     
     private func checkConnection() {
         connectionCheckTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            self?.ping()
+            Task { @MainActor in
+                self?.ping()
+            }
         }
     }
 }
@@ -293,10 +297,23 @@ extension HTTPManager {
 
         Task {
             do {
+                // 開始 Loading 並添加 Loading 消息
+                DispatchQueue.main.async {
+                    self.isLoading = true
+                    // 添加一個 Loading 狀態嘅 AI 消息
+                    let loadingMessage = ChatMessage(
+                        text: "正在思考...",
+                        isUser: false,
+                        timestamp: Date(),
+                        isError: false,
+                        isLoading: true
+                    )
+                    self.speechRecognizer?.messages.append(loadingMessage)
+                }
                 // 如果冇 connection_id，先創建會話
                 if self.connectionId.isEmpty {
                     let newConnectionId = try await createSession(characterId: character_idToUse)
-                    await setConnectionId(newConnectionId)
+                    self.setConnectionId(newConnectionId)
                 }
 
                 let request = HTTPChatRequest(
@@ -314,13 +331,32 @@ extension HTTPManager {
                 )
 
                 if let response = try? JSONDecoder().decode(HTTPChatResponse.self, from: data) {
-                    await handleChatResponse(response)
+                    handleChatResponse(response)
                 }
 
                 logger.info("發送文本: \(text)")
 
             } catch {
                 handleHTTPError(error)
+            }
+
+            // 停止 Loading，如果冇收到回應就移除 Loading 消息
+            DispatchQueue.main.async {
+                self.isLoading = false
+                // 如果冇成功回應，移除 Loading 消息
+                if let speechRecognizer = self.speechRecognizer {
+                    let messages = speechRecognizer.messages.compactMap { $0 as? ChatMessage }
+                    if let loadingMessageIndex = messages.lastIndex(where: { !$0.isUser && $0.isLoading }) {
+                        let errorMessage = ChatMessage(
+                            text: "抱歉，處理失敗，請重試。",
+                            isUser: false,
+                            timestamp: Date(),
+                            isError: true,
+                            isLoading: false
+                        )
+                        speechRecognizer.messages[loadingMessageIndex] = errorMessage
+                    }
+                }
             }
         }
     }
@@ -331,10 +367,23 @@ extension HTTPManager {
 
         Task {
             do {
+                // 開始 Loading 並添加 Loading 消息
+                DispatchQueue.main.async {
+                    self.isLoading = true
+                    // 添加一個 Loading 狀態嘅 AI 消息
+                    let loadingMessage = ChatMessage(
+                        text: "正在思考...",
+                        isUser: false,
+                        timestamp: Date(),
+                        isError: false,
+                        isLoading: true
+                    )
+                    self.speechRecognizer?.messages.append(loadingMessage)
+                }
                 // 如果冇 connection_id，先創建會話
                 if self.connectionId.isEmpty {
                     let newConnectionId = try await createSession(characterId: character_idToUse)
-                    await setConnectionId(newConnectionId)
+                    self.setConnectionId(newConnectionId)
                 }
 
                 let request = HTTPChatRequest(
@@ -352,13 +401,32 @@ extension HTTPManager {
                 )
 
                 if let response = try? JSONDecoder().decode(HTTPChatResponse.self, from: data) {
-                    await handleChatResponse(response)
+                    handleChatResponse(response)
                 }
 
                 logger.info("發送語音合成請求: \(text)")
 
             } catch {
                 handleHTTPError(error)
+            }
+
+            // 停止 Loading，如果冇收到回應就移除 Loading 消息
+            DispatchQueue.main.async {
+                self.isLoading = false
+                // 如果冇成功回應，移除 Loading 消息
+                if let speechRecognizer = self.speechRecognizer {
+                    let messages = speechRecognizer.messages.compactMap { $0 as? ChatMessage }
+                    if let loadingMessageIndex = messages.lastIndex(where: { !$0.isUser && $0.isLoading }) {
+                        let errorMessage = ChatMessage(
+                            text: "抱歉，處理失敗，請重試。",
+                            isUser: false,
+                            timestamp: Date(),
+                            isError: true,
+                            isLoading: false
+                        )
+                        speechRecognizer.messages[loadingMessageIndex] = errorMessage
+                    }
+                }
             }
         }
     }
@@ -490,7 +558,7 @@ extension HTTPManager {
             do {
                 // 嘗試使用新架構 (port 10001)
                 let characterData = try await validateCharacter(targetId)
-                await handleCharacterValidationResponse(characterData)
+                handleCharacterValidationResponse(characterData)
             } catch {
                 logger.warning("新架構角色驗證失敗，回退到舊架構: \(error.localizedDescription)")
 
@@ -507,7 +575,7 @@ extension HTTPManager {
                     logger.info("舊架構回應數據: \(String(data: data, encoding: .utf8) ?? "Invalid UTF-8")")
 
                     if let response = try? JSONDecoder().decode(HTTPCharacterResponse.self, from: data) {
-                        await handleCharacterResponse(response)
+                        handleCharacterResponse(response)
                     }
                 } catch {
                     logger.error("角色驗證完全失敗: \(error.localizedDescription)")
@@ -584,9 +652,26 @@ extension HTTPManager {
     private func handleChatResponse(_ response: HTTPChatResponse) {
         if response.success {
             self.geminiResponse = response.response
+            self.isLoading = false
 
-            let aiMessage = ChatMessage(text: response.response, isUser: false, timestamp: Date(), isError: false)
-            self.speechRecognizer?.messages.append(aiMessage)
+            // 尋找最後一個 Loading 狀態嘅 AI 消息並更新佢
+            if let speechRecognizer = self.speechRecognizer {
+                let messages = speechRecognizer.messages.compactMap { $0 as? ChatMessage }
+                if let loadingMessageIndex = messages.lastIndex(where: { !$0.isUser && $0.isLoading }) {
+                    let updatedMessage = ChatMessage(
+                        text: response.response,
+                        isUser: false,
+                        timestamp: Date(),
+                        isError: false,
+                        isLoading: false
+                    )
+                    speechRecognizer.messages[loadingMessageIndex] = updatedMessage
+                } else {
+                    // 如果冇 Loading 消息，直接添加新消息
+                    let aiMessage = ChatMessage(text: response.response, isUser: false, timestamp: Date(), isError: false)
+                    speechRecognizer.messages.append(aiMessage)
+                }
+            }
 
             // 優先從角色快取獲取 voice_id，其次使用 response 中的 voice_id，最後使用預設值
             let characterId = response.character_id ?? currentCharacter_id
@@ -597,6 +682,7 @@ extension HTTPManager {
 
         } else {
             self.lastError = response.error ?? "Unknown error"
+            self.isLoading = false
         }
     }
     
@@ -655,7 +741,7 @@ extension HTTPManager {
             do {
                 logger.info("刷新角色數據: \(targetId)")
                 let characterData = try await validateCharacter(targetId)
-                await handleCharacterValidationResponse(characterData)
+                handleCharacterValidationResponse(characterData)
             } catch {
                 logger.warning("刷新角色數據失敗: \(error.localizedDescription)")
             }

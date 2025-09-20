@@ -9,6 +9,7 @@ import Foundation
 import Combine
 
 // MARK: - Service Protocol
+@MainActor
 protocol ServiceProtocol: ObservableObject {
     var isConnected: Bool { get set }
     var connectionStatus: String { get set }
@@ -34,7 +35,7 @@ protocol ServiceProtocol: ObservableObject {
     func setCharacter_id(_ character_id: Int)
     func getCurrentCharacter_id() -> Int
     func playPCMAudio(_ data: Data)
-    func stopAudio()
+    func stopAudio() async
 }
 
 // Notification names are defined in HTTPManager.swift and WebSocketManager.swift

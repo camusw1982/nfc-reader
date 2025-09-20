@@ -32,10 +32,11 @@ struct NFCReaderView: View {
         NavigationStack {
             ZStack {
                 // 背景
-                Color(red: 0.08, green: 0.08, blue: 0.08)
+                Color(red: 0.00, green: 0.00, blue: 0.00)
                     .ignoresSafeArea()
+                BeautifulMechGradient()
                 
-                // 背景裝飾圓圈
+                /* // 背景裝飾圓圈
                 VStack {
                     HStack {
                         Spacer()
@@ -57,6 +58,7 @@ struct NFCReaderView: View {
                         Spacer()
                     }
                 }
+                */
                 
                 VStack(spacing: 0) {
                     // NFC 讀取區域 - 移到頂部對齊 NFC 傳感器
@@ -74,11 +76,20 @@ struct NFCReaderView: View {
                         // 主圓圈
                         Circle()
                             .stroke(Color.blue, lineWidth: 2)
-                            .frame(width: 280, height: 280)
+                            .frame(width: 300, height: 300)
                             .background(
                                 Circle()
-                                    .fill(Color.blue.opacity(0.4))
-                                    .frame(width: 280, height: 280)
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(stops: [
+                                                .init(color: Color.blue.opacity(0.4), location: 0.0),
+                                                .init(color: Color.blue.opacity(0.2), location: 1.0)
+                                            ]),
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .frame(width: 300, height: 300)
                             )
                         
                         // 內容
@@ -154,19 +165,19 @@ struct NFCReaderView: View {
                             Circle()
                                 .fill(httpAPIConnected ? .green : .red)
                                 .frame(width: 8, height: 8)
-                            Text(httpAPIConnected ? "總部在線" : "總部離線")
+                            Text(httpAPIConnected ? "已連接" : "無連線")
                                 .font(.system(size: 12))
                                 .foregroundColor(httpAPIConnected ? .green : .red)
                         }
                         .padding(.top, 30)
-                        .padding(.bottom, 15)
+                        .padding(.bottom, 25)
                     }
                     
                     // NFC 讀取按鈕
                     Button(action: {
                         startNFCReading()
                     }) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: "wand.and.rays")
                                 .font(.system(size:25))
                             Text("施展魔法")
@@ -177,15 +188,31 @@ struct NFCReaderView: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 25)
-                                .fill(Color.blue)
-                                .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(stops: [
+                                            .init(color: Color.blue.opacity(0.5), location: 0.0),
+                                            .init(color: Color.blue.opacity(0.7), location: 1.0)
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
                         )
                     }
                     .padding(.bottom, 20)
                     .disabled(nfcManager.isReading)
+                // Logo
+                Image("logo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 110)
+                    .luminanceToAlpha() // 用亮度做 alpha channel
+                    .colorInvert() // 變白色
+                    .padding(.bottom, 10)
 
                     // 即時串流測試按鈕 (AVAudioPlayer)
-                    /*NavigationLink(destination: MinimaxStreamTestView()) {
+                    /* NavigationLink(destination: MinimaxStreamTestView()) {
                         HStack(spacing: 6) {
                             Image(systemName: "waveform")
                                 .font(.system(size:20))
@@ -220,7 +247,6 @@ struct NFCReaderView: View {
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
                         )
                     } */
-                    .padding(.bottom, 40)
                 }
             }
             .onAppear {
@@ -263,7 +289,7 @@ struct NFCReaderView: View {
     }
     
     private func startNFCReading() {
-        logger.info("📡 開始 NFC 讀取")
+        logger.info("📡 開始讀取人物")
         nfcManager.startReading()
     }
 
