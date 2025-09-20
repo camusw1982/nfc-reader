@@ -70,7 +70,7 @@ struct LandingPageView: View {
                     // 對話區域 - 佔滿剩餘空間
                     ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
                     // 對話與Talk按鈕之間的間距
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 8)
                 }
                 
                 // 底部覆蓋層 - 包含語音控制元素
@@ -127,7 +127,7 @@ struct LandingPageView: View {
                                 )
                         }
                         .padding(.trailing, 20)
-                        .padding(.bottom, 0)
+                        .padding(.bottom, 10)
                     }
                 }
             }

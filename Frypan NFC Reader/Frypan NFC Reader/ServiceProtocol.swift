@@ -33,7 +33,7 @@ protocol ServiceProtocol: ObservableObject {
     func updateCharacterName(_ name: String, for character_id: Int?)
     func setCharacter_id(_ character_id: Int)
     func getCurrentCharacter_id() -> Int
-    func playMP3Audio(_ data: Data)
+    func playPCMAudio(_ data: Data)
     func stopAudio()
 }
 

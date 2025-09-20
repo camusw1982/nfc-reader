@@ -7,7 +7,11 @@
       "mcp__figma-dev-mode-mcp-server__get_code",
       "mcp__figma-dev-mode-mcp-server__get_image",
       "Bash(xcodebuild:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(sudo:*)"
     ],
     "deny": [],
     "ask": []

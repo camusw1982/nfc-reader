@@ -18,6 +18,7 @@ struct NFCReaderView: View {
     @State private var isValidatingID = false
     @State private var validationMessage: String = ""
     @State private var showValidationAlert = false
+    @State private var isValidationSuccessful = false
     @State private var httpAPIConnected = false
     @State private var characterData: [String: Any]?
     @State private var currentConnectionId: String = ""
@@ -101,11 +102,19 @@ struct NFCReaderView: View {
                     // 狀態信息
                     VStack(spacing: 10) {
                         // NFC 讀取狀態
-                        Text(nfcManager.message)
-                            .font(.system(size: 16))
-                            .foregroundColor(.white.opacity(0.4))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
+                        if shouldShowWelcomeMessage() {
+                            Text(NFCManager.defaultMessage)
+                                .font(.system(size: 16))
+                                .foregroundColor(.white.opacity(0.4))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                        } else if !nfcManager.message.isEmpty && nfcManager.message != NFCManager.defaultMessage {
+                            Text(nfcManager.message)
+                                .font(.system(size: 16))
+                                .foregroundColor(.white.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                        }
                         
                         // ID 驗證狀態
                         if isValidatingID {
@@ -133,7 +142,7 @@ struct NFCReaderView: View {
                         }
                         
                         // 讀取到的 ID 顯示（隱藏 debug 資訊）
-                        if !characterID.isEmpty {
+                        if isValidationSuccessful {
                             Text("✅ 成功獲取靈魂，現在施展魔法")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.green)
@@ -219,8 +228,8 @@ struct NFCReaderView: View {
                 initializeNFCReaderView()
             }
             .onDisappear {
-                // 清除所有舊資訊
-                clearAllData()
+                // 停止 NFC 讀取
+                nfcManager.stopReading()
             }
             .navigationDestination(isPresented: $showLandingPage) {
                 LandingPageView()
@@ -360,6 +369,7 @@ struct NFCReaderView: View {
                 
                 if isValid {
                     self.validationMessage = "✅ 成功招魂！"
+                    self.isValidationSuccessful = true
                     self.characterData = characterData
                     self.logger.info("✅ Character ID \(id) 驗證成功，正在獲取新會話...")
 
@@ -395,14 +405,16 @@ struct NFCReaderView: View {
                         }
                     }
                 } else {
-                    self.validationMessage = "❌ Character ID 驗證失敗"
+                    self.validationMessage = "❌ 搵唔到呢個靈魂呀"
+                    self.isValidationSuccessful = false
                     self.logger.error("❌ Character ID \(id) 驗證失敗")
                     self.showValidationAlert = true
-                    
+
                     // 重置狀態，允許重新讀取
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         self.characterID = ""
                         self.validationMessage = ""
+                        self.isValidationSuccessful = false
                         self.characterData = nil
                     }
                 }
@@ -414,19 +426,19 @@ struct NFCReaderView: View {
     
     private func initializeNFCReaderView() {
         logger.info("🔄 重新初始化 NFCReaderView")
-        
-        // 清除所有舊資料
-        clearAllData()
-        
-        // 重新啟動脈衝動畫
-        isPulsing = true
-        
+
         // 重置 NFC Manager
         nfcManager.reset()
-        
+
+        // 重新啟動脈衝動畫
+        isPulsing = true
+
+        // 清除所有舊資料
+        clearAllData()
+
         // 檢查 HTTP API 連接狀態
         checkHTTPAPIConnection()
-        
+
         logger.info("✅ NFCReaderView 重新初始化完成")
     }
     
@@ -438,12 +450,24 @@ struct NFCReaderView: View {
         characterData = nil
         isValidatingID = false
         showValidationAlert = false
+        isValidationSuccessful = false
         currentConnectionId = ""
         logger.info("🧹 已清除所有舊資訊")
     }
     
+    // MARK: - 歡迎消息顯示邏輯
+
+    private func shouldShowWelcomeMessage() -> Bool {
+        // 當以下情況顯示歡迎消息：
+        // 1. 沒有在讀取 NFC
+        // 2. 沒有在驗證 ID
+        // 3. 沒有顯示驗證消息
+        // 4. 沒有成功讀取到 ID
+        return !nfcManager.isReading && !isValidatingID && validationMessage.isEmpty && !isValidationSuccessful
+    }
+
     // MARK: - HTTP API 連接檢查
-    
+
     private func checkHTTPAPIConnection() {
         logger.info("🌐 檢查 HTTP API 連接狀態")
         

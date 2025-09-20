@@ -9,10 +9,12 @@ import Foundation
 import CoreNFC
 import SwiftUI
 
-class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCNDEFReaderSessionDelegate {
-    
-    @Published var nfcSession: NFCTagReaderSession?
-    @Published var message: String = "準備讀取 NFC 標籤"
+class NFCManager: NSObject, ObservableObject, NFCNDEFReaderSessionDelegate {
+
+    // 統一消息常量
+    static let defaultMessage = "準備讀取人物"
+
+    @Published var message: String = defaultMessage
     @Published var isReading: Bool = false
     @Published var detectedTag: String?
     @Published var nfcTextContent: String = ""
@@ -44,11 +46,9 @@ class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCND
     func stopReading() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            self.nfcSession?.invalidate()
-            self.nfcSession = nil
+
             self.isReading = false
-            self.message = "已停止讀取"
+            self.message = Self.defaultMessage
             self.detectedTag = nil
             self.nfcTextContent = ""
         }
@@ -59,72 +59,11 @@ class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCND
     func reset() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            // 停止任何正在進行的會話
-            self.nfcSession?.invalidate()
-            self.nfcSession = nil
-            
-            // 重置所有狀態
+
             self.isReading = false
-            self.message = "準備讀取 NFC 標籤"
+            self.message = Self.defaultMessage
             self.detectedTag = nil
             self.nfcTextContent = ""
-        }
-    }
-    
-    // MARK: - NFCTagReaderSessionDelegate
-    
-    func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {
-        DispatchQueue.main.async { [weak self] in
-            self?.message = "NFC 讀取器已啟動"
-        }
-    }
-    
-    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.isReading = false
-            self.nfcSession = nil
-            
-            if let readerError = error as? NFCReaderError {
-                switch readerError.code {
-                case .readerSessionInvalidationErrorUserCanceled:
-                    self.message = "用戶取消了讀取"
-                case .readerSessionInvalidationErrorSessionTimeout:
-                    self.message = "讀取超時"
-                case .readerSessionInvalidationErrorSessionTerminatedUnexpectedly:
-                    self.message = "讀取會話意外終止"
-                default:
-                    self.message = "讀取錯誤: \(error.localizedDescription)"
-                }
-            } else {
-                self.message = "讀取錯誤: \(error.localizedDescription)"
-            }
-        }
-    }
-    
-    func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
-        guard let firstTag = tags.first else { return }
-        
-        session.connect(to: firstTag) { [weak self] error in
-            if let error = error {
-                session.invalidate(errorMessage: "連接失敗: \(error.localizedDescription)")
-                return
-            }
-            
-            guard let self = self else { return }
-            
-            switch firstTag {
-            case .miFare(let mifareTag):
-                self.readMiFareTag(mifareTag, session: session)
-            case .iso7816(let iso7816Tag):
-                self.readISO7816Tag(iso7816Tag, session: session)
-            case .feliCa(let feliCaTag):
-                self.readFeliCaTag(feliCaTag, session: session)
-            default:
-                session.invalidate(errorMessage: "不支援的標籤類型")
-            }
         }
     }
     
@@ -139,23 +78,11 @@ class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCND
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
+
             self.isReading = false
-            
-            if let readerError = error as? NFCReaderError {
-                switch readerError.code {
-                case .readerSessionInvalidationErrorUserCanceled:
-                    self.message = "用戶取消了讀取"
-                case .readerSessionInvalidationErrorSessionTimeout:
-                    self.message = "讀取超時"
-                case .readerSessionInvalidationErrorSessionTerminatedUnexpectedly:
-                    self.message = "讀取會話意外終止"
-                default:
-                    self.message = "讀取錯誤: \(error.localizedDescription)"
-                }
-            } else {
-                self.message = "讀取錯誤: \(error.localizedDescription)"
-            }
+
+            // 簡化錯誤處理 - 總是重置為預設消息
+            self.message = Self.defaultMessage
         }
     }
     
@@ -317,79 +244,6 @@ class NFCManager: NSObject, ObservableObject, NFCTagReaderSessionDelegate, NFCND
         guard let uriString = String(data: uriData, encoding: .utf8) else { return nil }
         
         return prefix + uriString
-    }
-
-    // MARK: - 標籤讀取方法 (後備方案)
-    
-    private func readMiFareTag(_ tag: NFCMiFareTag, session: NFCTagReaderSession) {
-        // 讀取 MiFare 標籤的 UID
-        let uid = tag.identifier.hexString
-        var tagData = "MiFare 標籤\nUID: \(uid)"
-        
-        // 嘗試讀取更多數據
-        do {
-            if let data = try readMiFareData(tag) {
-                tagData += "\n數據: \(data)"
-            }
-        } catch {
-            print("讀取 MiFare 數據失敗: \(error.localizedDescription)")
-        }
-        
-        DispatchQueue.main.async {
-            self.detectedTag = tagData
-            self.message = "成功讀取 MiFare 標籤"
-        }
-        
-        session.alertMessage = "" // 清空系統提示
-        session.invalidate()
-    }
-    
-    private func readISO7816Tag(_ tag: NFCISO7816Tag, session: NFCTagReaderSession) {
-        // 讀取 ISO7816 標籤信息
-        let uid = tag.identifier.hexString
-        let historicalBytes = tag.historicalBytes?.hexString ?? "N/A"
-        let applicationData = tag.applicationData?.hexString ?? "N/A"
-        
-        let tagInfo = """
-        ISO7816 標籤
-        UID: \(uid)
-        Historical Bytes: \(historicalBytes)
-        Application Data: \(applicationData)
-        """
-        
-        DispatchQueue.main.async {
-            self.detectedTag = tagInfo
-            self.message = "成功讀取 ISO7816 標籤"
-        }
-        
-        session.alertMessage = "" // 清空系統提示
-        session.invalidate()
-    }
-    
-    private func readFeliCaTag(_ tag: NFCFeliCaTag, session: NFCTagReaderSession) {
-        // 讀取 FeliCa 標籤信息
-        let idm = tag.currentIDm.hexString
-        let systemCode = tag.currentSystemCode.hexString
-        
-        let tagInfo = """
-        FeliCa 標籤
-        IDm: \(idm)
-        System Code: \(systemCode)
-        """
-        
-        DispatchQueue.main.async {
-            self.detectedTag = tagInfo
-            self.message = "成功讀取 FeliCa 標籤"
-        }
-        
-        session.alertMessage = "" // 清空系統提示
-        session.invalidate()
-    }
-    
-    private func readMiFareData(_ tag: NFCMiFareTag) throws -> String? {
-        // 這裡可以添加更複雜的 MiFare 數據讀取邏輯
-        // 例如讀取特定區塊的數據
-        return nil
     }
 }
 

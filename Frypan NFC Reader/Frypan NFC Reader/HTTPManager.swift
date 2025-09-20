@@ -163,23 +163,36 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
     private func setupAudioBinding() {
         // 綁定音頻管理器的狀態到 HTTP 管理器
         audioManager.$isPlayingAudio
-            .assign(to: &$isPlayingAudio)
+            .sink { [weak self] audioPlaying in
+                DispatchQueue.main.async {
+                    self?.updatePlayingState()
+                }
+            }
+            .store(in: &cancellables)
 
         // 監聽 MiniMaxStreamManager 嘅播放狀態
         if let streamManager = miniMaxStreamManager {
             streamManager.$isPlaying
-                .sink { [weak self] isStreamPlaying in
+                .sink { [weak self] streamPlaying in
                     DispatchQueue.main.async {
-                        // 如果 MiniMax 正喺播放，優先顯示佢嘅狀態
-                        if isStreamPlaying {
-                            self?.isPlayingAudio = true
-                        } else {
-                            // 如果 MiniMax 冇播放，使用 AudioManager 嘅狀態
-                            self?.isPlayingAudio = self?.audioManager.isPlayingAudio ?? false
-                        }
+                        self?.updatePlayingState()
                     }
                 }
                 .store(in: &cancellables)
+        }
+    }
+
+    private func updatePlayingState() {
+        let audioPlaying = audioManager.isPlayingAudio
+        let streamPlaying = miniMaxStreamManager?.isPlaying ?? false
+        let newState = streamPlaying || audioPlaying
+
+        logger.info("更新播放狀態 - AudioManager: \(audioPlaying), MiniMax: \(streamPlaying), 新狀態: \(newState)")
+
+        // 只有當狀態真正改變時先更新
+        if self.isPlayingAudio != newState {
+            self.isPlayingAudio = newState
+            logger.info("播放狀態已更改為: \(newState)")
         }
     }
     
@@ -189,6 +202,9 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol {
             logger.warning("MiniMax API Key 未設置，語音合成功能將不可用")
             return
         }
+
+        // 清理現有嘅訂閱
+        cancellables.removeAll()
 
         // 初始化 MiniMax 串流管理器
         self.miniMaxStreamManager = MiniMaxStreamManager()
@@ -666,5 +682,9 @@ extension HTTPManager {
 
     func getConnectionId() -> String {
         return connectionId
+    }
+
+    func playPCMAudio(_ data: Data) {
+        audioManager.playMP3Audio(data)
     }
 }

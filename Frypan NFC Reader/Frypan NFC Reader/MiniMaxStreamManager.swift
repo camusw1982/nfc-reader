@@ -15,16 +15,11 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
     // MARK: - Properties
     @Published var isPlaying = false
-    @Published var receivedChunks = 0
-    @Published var firstChunkDelay: Double = 0
-    @Published var totalChunksTime: Double = 0
-    @Published var playbackStatus: String = "等待中..."
     @Published var errorMessage: String?
 
     // HTTP API相關
     private var urlSessionTask: URLSessionTask?
     private var isProcessing = false
-    private var streamStartTime: Date?
 
 
     // AVAudioEngine 相關
@@ -34,13 +29,25 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
     // 音頻緩衝區隊列
     private var audioBufferQueue: [AVAudioPCMBuffer] = []
-    private var isPlayingBuffer = false
+
+    // 預加載配置
+    private let minBufferCount = 3  // 最小緩衝區數量
+    private let maxBufferCount = 10 // 最大緩衝區數量
 
     // 配置
     private let groupId: String
     private let apiKey: String
     private let baseURL = "https://api.minimaxi.chat/v1/t2a_v2"
     private let logger = Logger(subsystem: "com.frypan.nfc.reader", category: "MiniMaxStreamManager")
+
+    // MARK: - Audio Format Configuration
+    private struct AudioConfig {
+        static let sampleRate: Double = 32000
+        static let channels: UInt32 = 1
+        static let format: String = "pcm"
+        static let bytesPerSample: Int = 2  // 16-bit PCM
+        static let bytesPerFrame: Int = bytesPerSample * Int(channels)  // 2 bytes per frame for mono
+    }
 
     // MARK: - Initialization
     override init() {
@@ -66,14 +73,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
     // MARK: - Audio Engine Management
 
-    private func ensureAudioEngineReady() -> Bool {
-        guard let engine = audioEngine, let player = playerNode else {
-            logger.error("音頻組件未正確初始化")
-            reinitializeAudioEngine()
-            return false
-        }
-        return true
-    }
+    // 過度保守嘅錯誤恢復已移除，使用直接嘅錯誤處理
 
     private func setupAudioEngine() {
         logger.info("初始化音頻引擎")
@@ -90,7 +90,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
-        audioFormat = AVAudioFormat(standardFormatWithSampleRate: 32000, channels: 1)
+        audioFormat = AVAudioFormat(standardFormatWithSampleRate: AudioConfig.sampleRate, channels: AudioConfig.channels)
 
         guard let engine = audioEngine, let player = playerNode, let format = audioFormat else {
             logger.error("音頻引擎初始化失敗")
@@ -106,11 +106,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         logger.info("重新初始化音頻引擎")
 
         stopAudioEngine()
-        audioEngine = nil
-        playerNode = nil
-        audioFormat = nil
         audioBufferQueue.removeAll()
-        isPlayingBuffer = false
 
         setupAudioEngine()
     }
@@ -130,8 +126,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             self.logger.info("開始語音合成 (MiniMaxStreamManager): \(text.prefix(50))... (voice_id: \(voiceId))")
             self.isProcessing = true
             self.isPlaying = true
-            self.streamStartTime = Date()
-            self.playbackStatus = "正在發送請求..."
 
             // 使用 SSE 串流
             self.sendSSEStreamingRequest(text, voiceId: voiceId, speed: speed, pitch: pitch, emotion: emotion)
@@ -145,23 +139,18 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         urlSessionTask?.cancel()
         urlSessionTask = nil
 
-        // 停止 AVAudioEngine
-        stopAudioEngine()
+        // 立即停止所有音頻播放
+        stopAudioEngineImmediately()
 
-        DispatchQueue.main.async {
-            self.playbackStatus = "已停止"
-        }
+        // 清理緩衝區
+        audioBufferQueue.removeAll()
+
+        // UI 狀態已經通過 isPlaying 處理
     }
 
     // MARK: - Private Methods
     private func resetStreaming() {
         logger.info("重置串流狀態")
-
-        // 重置計數器同時間
-        receivedChunks = 0
-        firstChunkDelay = 0
-        totalChunksTime = 0
-        streamStartTime = nil
 
         // 重置狀態
         isProcessing = false
@@ -176,9 +165,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         reinitializeAudioEngine()
 
         // 重置播放狀態
-        DispatchQueue.main.async {
-            self.playbackStatus = "等待中..."
-        }
+        // UI 狀態已經通過 isPlaying 處理
 
         logger.info("串流狀態重置完成")
     }
@@ -199,9 +186,29 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
                 logger.info("AVAudioEngine 已停止")
             }
         }
+    }
 
-        // 重置狀態
-        isPlayingBuffer = false
+    private func stopAudioEngineImmediately() {
+        logger.info("立即停止音頻引擎")
+
+        // 立即停止播放節點
+        if let player = playerNode {
+            player.stop()
+            logger.info("AVAudioPlayerNode 立即停止")
+        }
+
+        // 立即停止音頻引擎
+        if let engine = audioEngine {
+            if engine.isRunning {
+                engine.stop()
+                logger.info("AVAudioEngine 立即停止")
+            }
+        }
+
+        // 重置音頻引擎以確保完全停止
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            self.reinitializeAudioEngine()
+        }
     }
 
     // MARK: - SSE 串流方法
@@ -231,9 +238,9 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
                 "emotion": emotion
             ],
             "audio_setting": [
-                "sample_rate": 32000,  // 使用 Minimax 文檔指定嘅採樣率
-                "format": "pcm",      // 直接使用 PCM 格式，避免轉換
-                "channel": 1          // 單聲道
+                "sample_rate": AudioConfig.sampleRate,
+                "format": AudioConfig.format,
+                "channel": AudioConfig.channels
             ],
             "language_boost": "Chinese,Yue"
         ]
@@ -284,13 +291,11 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         // 處理完所有 chunk 後，標記串流完成，但唔立即設置播放狀態
         DispatchQueue.main.async {
-            self.totalChunksTime = Date().timeIntervalSince(self.streamStartTime ?? Date())
             // 標記 SSE 處理完成，但播放狀態由音頻隊列決定
-            self.logger.info("SSE 串流處理完成，共接收 \(self.receivedChunks) 個 chunk")
+            self.logger.info("SSE 串流處理完成")
 
             // SSE 串流完成，標記處理結束
             self.isProcessing = false
-            self.logger.info("SSE 串流處理完成")
         }
     }
 
@@ -340,22 +345,16 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     // MARK: - 音頻處理
     private func processAudioChunk(_ audioData: Data) {
         DispatchQueue.main.async {
-            self.receivedChunks += 1
+            self.logger.debug("處理音頻 chunk，大小: \(audioData.count) bytes")
 
-            // 記錄首個 chunk 延遲
-            if self.receivedChunks == 1 {
-                self.firstChunkDelay = Date().timeIntervalSince(self.streamStartTime ?? Date())
-                self.logger.info("首個音頻 chunk 收到，延遲: \(self.firstChunkDelay) 秒")
-                self.playbackStatus = "正在串流播放..."
+            // 創建 PCM 緩衝區並加入隊列
+            self.createAndQueuePCMBuffer(from: audioData)
 
-                // 啟動音頻引擎
+            // 當緩衝區達到閾值時啟動播放
+            if !self.isPlaying && self.audioBufferQueue.count >= self.minBufferCount {
+                self.logger.info("緩衝區達到預加載閾值，開始播放")
                 self.startAudioEngine()
             }
-
-            self.logger.debug("處理第 \(self.receivedChunks) 個音頻 chunk，大小: \(audioData.count) bytes")
-
-            // 直接創建 PCMBuffer 並加入隊列
-            self.createAndQueuePCMBuffer(from: audioData)
         }
     }
 
@@ -363,7 +362,11 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         logger.info("啟動音頻引擎")
 
         // 檢查音頻組件狀態
-        guard ensureAudioEngineReady() else { return }
+        guard let engine = audioEngine, let player = playerNode else {
+            logger.error("音頻組件未正確初始化")
+            handleError("音頻引擎初始化失敗")
+            return
+        }
 
         // 如果引擎已經喺運行，先停止
         if engine.isRunning {
@@ -375,10 +378,9 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         do {
             try engine.start()
             logger.info("音頻引擎啟動成功")
-            isPlayingBuffer = true
+            isPlaying = true
         } catch {
             logger.error("音頻引擎啟動失敗: \(error)")
-            reinitializeAudioEngine()
             handleError("音頻引擎啟動失敗")
         }
     }
@@ -386,8 +388,14 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     private func createAndQueuePCMBuffer(from audioData: Data) {
         guard let format = audioFormat else { return }
 
-        // PCM 數據每個樣本 2 bytes (16-bit)，單聲道 = 2 bytes per frame
-        let frameCount = AVAudioFrameCount(audioData.count) / 2
+        // 防止緩衝區過度積壓
+        guard audioBufferQueue.count < maxBufferCount else {
+            logger.warning("音頻緩衝區已達最大限制，跳過當前 chunk")
+            return
+        }
+
+        // 計算音頻幀數
+        let frameCount = AVAudioFrameCount(audioData.count / AudioConfig.bytesPerFrame)
         guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             logger.error("創建音頻緩衝區失敗")
             return
@@ -407,19 +415,20 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         pcmBuffer.frameLength = frameCount
 
-        logger.info("創建 PCM 緩衝區: \(frameCount) 幀")
+        // 降低日誌級別，減少冗餘輸出
 
-        // 加入隊列並播放
+        // 加入隊列
         audioBufferQueue.append(pcmBuffer)
-        playNextBuffer()
+
+        // 只有在音頻引擎運行且緩衝區達到閾值時先播放
+        if isPlaying && audioBufferQueue.count >= minBufferCount {
+            playNextBuffer()
+        }
     }
 
 
     private func playNextBuffer() {
         guard !audioBufferQueue.isEmpty else {
-            self.logger.warning("音頻緩衝區隊列為空")
-            isPlayingBuffer = false
-
             // 檢查是否播放完成 - 當隊列為空且 SSE 串流已經完成時
             if !isProcessing {
                 handlePlaybackCompletion()
@@ -428,7 +437,11 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         }
 
         // 檢查引擎狀態
-        guard self.ensureAudioEngineReady() else { return }
+        guard let engine = self.audioEngine, let player = self.playerNode else {
+            self.logger.error("音頻組件未正確初始化")
+            self.handleError("音頻引擎初始化失敗")
+            return
+        }
 
         // 確保引擎運行
         if !engine.isRunning {
@@ -437,7 +450,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
                 self.logger.info("AVAudioEngine 啟動成功")
             } catch {
                 self.logger.error("AVAudioEngine 啟動失敗: \(error)")
-                self.reinitializeAudioEngine()
+                self.handleError("音頻引擎啟動失敗")
                 return
             }
         }
@@ -445,20 +458,23 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         // 確保播放節點運行
         if !player.isPlaying {
             player.play()
-            isPlayingBuffer = true
             self.logger.info("AVAudioPlayerNode 開始播放")
         }
 
         // 取出第一個 buffer 進行播放
         let buffer = audioBufferQueue.removeFirst()
-        self.logger.debug("播放音頻緩衝區: \(buffer.frameLength) 幀，隊列剩餘: \(self.audioBufferQueue.count)")
+        // 減少冗餘播放日誌
 
-        // 安排播放
+        // 安排播放 - 使用更精確的播放完成回調
         player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: { [weak self] in
             DispatchQueue.main.async {
-                self?.logger.debug("音頻緩衝區播放完成")
-                // 播完當前 buffer 後，立即播放下一個
-                self?.playNextBuffer()
+                guard let self = self else { return }
+                // 減少播放完成日誌
+
+                // 延遲一小段時間確保播放狀態更新
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    self.playNextBuffer()
+                }
             }
         })
     }
@@ -498,20 +514,20 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     private func handlePlaybackCompletion() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+
+            // 檢查是否應該標記播放完成
+            guard self.isPlaying else {
+                return // 已經唔係播放狀態，唔需要處理
+            }
+
+            // 確認隊列為空且串流完成
+            guard self.audioBufferQueue.isEmpty && !self.isProcessing else {
+                return // 還有數據要播放或串流未完成
+            }
+
             self.logger.info("播放完成")
-
-            if let startTime = self.streamStartTime {
-                self.totalChunksTime = Date().timeIntervalSince(startTime)
-            }
-
-            self.playbackStatus = "播放完成"
             self.isPlaying = false
-            self.isProcessing = false  // 關鍵：重置處理狀態
-
-            // 延遲重置，讓用戶看到完成狀態
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                self.playbackStatus = "等待中..."
-            }
+            self.isProcessing = false
         }
     }
 
