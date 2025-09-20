@@ -64,6 +64,17 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Audio Engine Management
+
+    private func ensureAudioEngineReady() -> Bool {
+        guard let engine = audioEngine, let player = playerNode else {
+            logger.error("音頻組件未正確初始化")
+            reinitializeAudioEngine()
+            return false
+        }
+        return true
+    }
+
     private func setupAudioEngine() {
         logger.info("初始化音頻引擎")
 
@@ -79,8 +90,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
-
-        // 使用與 API 請求相同嘅音頻格式
         audioFormat = AVAudioFormat(standardFormatWithSampleRate: 32000, channels: 1)
 
         guard let engine = audioEngine, let player = playerNode, let format = audioFormat else {
@@ -88,29 +97,21 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             return
         }
 
-        // 連接節點
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
-
-        logger.info("AVAudioEngine 初始化成功，格式: 32000Hz, 1通道")
+        logger.info("音頻引擎初始化成功")
     }
 
     private func reinitializeAudioEngine() {
         logger.info("重新初始化音頻引擎")
 
-        // 停止現有引擎
         stopAudioEngine()
-
-        // 清理舊嘅引用
         audioEngine = nil
         playerNode = nil
         audioFormat = nil
-
-        // 清空隊列
         audioBufferQueue.removeAll()
         isPlayingBuffer = false
 
-        // 重新設置
         setupAudioEngine()
     }
 
@@ -207,7 +208,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     private func sendSSEStreamingRequest(_ text: String, voiceId: String, speed: Float, pitch: Int, emotion: String) {
         guard let url = URL(string: "\(baseURL)?GroupId=\(groupId)") else {
             logger.error("無效的 API URL")
-            handleError("無效的 API URL")
+            handleError("配置錯誤")
             return
         }
 
@@ -242,7 +243,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             request.httpBody = jsonData
         } catch {
             logger.error("JSON 序列化失敗: \(error)")
-            handleError("JSON 序列化失敗")
+            handleError("請求格式錯誤")
             return
         }
 
@@ -250,7 +251,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         urlSessionTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
                 self?.logger.error("SSE API 請求失敗: \(error)")
-                self?.handleError("SSE API 請求失敗: \(error.localizedDescription)")
+                self?.handleError("網絡請求失敗")
                 return
             }
 
@@ -310,7 +311,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
               statusCode == 0 else {
             let errorMsg = (json["base_resp"] as? [String: Any])?["status_msg"] as? String ?? "SSE API 返回錯誤"
             logger.error("SSE API 錯誤: \(errorMsg)")
-            handleError("SSE API 錯誤: \(errorMsg)")
+            handleError("服務器錯誤")
             return
         }
 
@@ -328,7 +329,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         // 轉換 hex 音頻數據
         guard let audioData = hexStringToData(audioHex) else {
-            logger.error("SSE 音頻數據轉換失敗")
+            logger.error("音頻數據轉換失敗")
             return
         }
 
@@ -362,12 +363,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         logger.info("啟動音頻引擎")
 
         // 檢查音頻組件狀態
-        guard let engine = audioEngine, let player = playerNode else {
-            logger.error("音頻組件未正確初始化")
-            // 嘗試重新初始化
-            reinitializeAudioEngine()
-            return
-        }
+        guard ensureAudioEngineReady() else { return }
 
         // 如果引擎已經喺運行，先停止
         if engine.isRunning {
@@ -382,9 +378,8 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             isPlayingBuffer = true
         } catch {
             logger.error("音頻引擎啟動失敗: \(error)")
-            // 嘗試重新初始化
             reinitializeAudioEngine()
-            handleError("音頻引擎啟動失敗: \(error.localizedDescription)")
+            handleError("音頻引擎啟動失敗")
         }
     }
 
@@ -394,7 +389,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         // PCM 數據每個樣本 2 bytes (16-bit)，單聲道 = 2 bytes per frame
         let frameCount = AVAudioFrameCount(audioData.count) / 2
         guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            logger.error("創建 PCM 緩衝區失敗")
+            logger.error("創建音頻緩衝區失敗")
             return
         }
 
@@ -433,12 +428,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         }
 
         // 檢查引擎狀態
-        guard let engine = self.audioEngine, let player = self.playerNode else {
-            self.logger.error("音頻組件未正確初始化，嘗試重新初始化")
-            // 嘗試重新初始化音頻引擎
-            self.reinitializeAudioEngine()
-            return
-        }
+        guard self.ensureAudioEngineReady() else { return }
 
         // 確保引擎運行
         if !engine.isRunning {
@@ -446,7 +436,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
                 try engine.start()
                 self.logger.info("AVAudioEngine 啟動成功")
             } catch {
-                self.logger.error("AVAudioEngine 啟動失敗: \(error)，嘗試重新初始化")
+                self.logger.error("AVAudioEngine 啟動失敗: \(error)")
                 self.reinitializeAudioEngine()
                 return
             }

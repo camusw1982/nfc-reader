@@ -59,7 +59,7 @@ struct UserBubbleView: View {
                     .padding(.vertical, 12)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]),
+                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.9)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )

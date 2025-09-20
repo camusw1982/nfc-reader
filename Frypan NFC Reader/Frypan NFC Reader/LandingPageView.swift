@@ -69,6 +69,7 @@ struct LandingPageView: View {
                     
                     // 對話區域 - 佔滿剩餘空間
                     ChatListView(messages: speechRecognizer.messages.compactMap { $0 as? ChatMessage })
+                    // 對話與Talk按鈕之間的間距
                         .padding(.bottom, 10)
                 }
                 
@@ -117,12 +118,12 @@ struct LandingPageView: View {
                             goBackToNFCReader()
                         }) {
                             Image(systemName: "arrow.backward.circle.fill")
-                                .font(.system(size: 40))
+                                .font(.system(size: 28))
                                 .foregroundColor(.blue.opacity(0.8))
                                 .background(
                                     Circle()
                                         .fill(Color.white.opacity(0.1))
-                                        .frame(width: 50, height: 50)
+                                        .frame(width: 40, height: 40)
                                 )
                         }
                         .padding(.trailing, 20)
