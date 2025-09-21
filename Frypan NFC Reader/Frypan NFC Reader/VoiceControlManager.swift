@@ -34,8 +34,7 @@ class VoiceControlManager: ObservableObject {
             self.isRecordingConfirmed = false
             self.currentSlideAction = SlideAction.none
             self.isInitialized = true
-            print("✅ 語音控制管理器初始化完成")
-        }
+          }
     }
     
     func resetRecordingState() {
@@ -45,8 +44,7 @@ class VoiceControlManager: ObservableObject {
             self.showSlideControls = false
             self.slideOffset = 0
             self.currentSlideAction = SlideAction.none
-            print("🔄 錄音狀態已完全重置")
-        }
+          }
     }
     
     func resetRecordingState(speechRecognizer: SpeechRecognizer) {

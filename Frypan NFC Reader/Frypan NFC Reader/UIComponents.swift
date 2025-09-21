@@ -96,13 +96,13 @@ struct BottomToolbarView: View {
                     .foregroundColor(httpManager.isConnected ? Color.green : Color.white.opacity(0.7))
             }
             
-            /*Button(action: {
+            /* Button(action: {
                 httpManager.clearHistory()
             }) {
                 Image(systemName: "clock.badge.xmark")
                     .font(.system(size: 18))
                     .foregroundColor(.white.opacity(0.7))
-            }*/
+            } */
             
             Button(action: {
                 // 停止所有音頻播放

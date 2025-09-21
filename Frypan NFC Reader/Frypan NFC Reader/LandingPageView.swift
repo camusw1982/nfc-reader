@@ -22,13 +22,13 @@ struct LandingPageView: View {
     private var httpManager: HTTPManager {
         return HTTPManager.shared
     }
-    
     var body: some View {
+        
         ZStack {
             Color(red: 0.07, green: 0.07, blue: 0.07)
                 .ignoresSafeArea()
             BeautifulMechGradient()
-              
+            
             // 背景
             /* Color(red: 0.08, green: 0.08, blue: 0.08)
              .ignoresSafeArea()

@@ -7,8 +7,13 @@
 
 import SwiftUI
 
+// MARK: - Notification Names
+extension Notification.Name {
+    static let scrollToBottom = Notification.Name("scrollToBottom")
+}
+
 // MARK: - Chat Message Model
-struct ChatMessage: Identifiable, Codable {
+struct ChatMessage: Identifiable, Codable, Equatable {
     let id: UUID
     let text: String
     let isUser: Bool
@@ -23,6 +28,11 @@ struct ChatMessage: Identifiable, Codable {
         self.timestamp = timestamp
         self.isError = isError
         self.isLoading = isLoading
+    }
+
+    // Equatable 實現 - 基於 ID 判斷相等性
+    static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
+        return lhs.id == rhs.id
     }
 }
 
@@ -157,6 +167,22 @@ struct AIBubbleView: View {
                 }
             }
         }
+        .onAppear {
+            // 當消息從 loading 變為正常狀態時，觸發滾動
+            if !message.isLoading {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NotificationCenter.default.post(name: .scrollToBottom, object: message.id)
+                }
+            }
+        }
+        .onChange(of: message.isLoading) { _, isLoading in
+            // 當 isLoading 從 true 變為 false 時，觸發滾動
+            if !isLoading {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NotificationCenter.default.post(name: .scrollToBottom, object: message.id)
+                }
+            }
+        }
     }
     
     private func formatTime(_ date: Date) -> String {
@@ -169,7 +195,7 @@ struct AIBubbleView: View {
 // MARK: - Chat List View
 struct ChatListView: View {
     let messages: [ChatMessage]
-    
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -182,18 +208,31 @@ struct ChatListView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
-            .onChange(of: messages.count) { _, _ in
+            .onChange(of: messages) { oldMessages, newMessages in
                 // 自動滾動到最新消息
-                if let lastMessage = messages.last {
+                if let lastMessage = newMessages.last {
+                    // 添加小延遲確保 UI 更新完成
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .scrollToBottom)) { notification in
+                // 處理滾動通知
+                if let messageId = notification.object as? UUID {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        proxy.scrollTo(messageId, anchor: .bottom)
                     }
                 }
             }
             .onAppear {
                 // 初始滾動到底部
                 if let lastMessage = messages.last {
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
                         withAnimation(.easeInOut(duration: 0.3)) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }

@@ -11,8 +11,7 @@ class WebServiceManager: ObservableObject {
 
     init() {
         self.serverURL = Self.createServerURL()
-        logger.info("WebServiceManager 初始化完成，服務器地址: \(self.serverURL.absoluteString)")
-    }
+      }
 
     private static func createServerURL() -> URL {
         if let customURL = ProcessInfo.processInfo.environment["SERVER_URL"],

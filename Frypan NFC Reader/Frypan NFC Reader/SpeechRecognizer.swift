@@ -56,8 +56,7 @@ class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
                 if recognizer.isAvailable {
                     speechRecognizer = recognizer
                     speechRecognizer?.delegate = self
-                    print("✅ 成功初始化語音識別器，語言: \(language)")
-                    return
+                      return
                 }
             }
         }

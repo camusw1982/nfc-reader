@@ -12,7 +12,8 @@
       "Bash(kill:*)",
       "Bash(pkill:*)",
       "Bash(sudo:*)",
-      "Read(///**)"
+      "Read(///**)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

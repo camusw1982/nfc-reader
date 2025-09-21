@@ -64,7 +64,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .default, options: [])
             try audioSession.setActive(true)
-            logger.info("音頻會話設置成功")
         } catch {
             logger.error("音頻會話設置失敗: \(error)")
             self.errorMessage = "音頻會話設置失敗: \(error.localizedDescription)"
@@ -76,7 +75,6 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     // 過度保守嘅錯誤恢復已移除，使用直接嘅錯誤處理
 
     private func setupAudioEngine() {
-        logger.info("初始化音頻引擎")
 
         // 如果已經存在，先清理
         if let existingEngine = audioEngine {
@@ -99,11 +97,9 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
 
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
-        logger.info("音頻引擎初始化成功")
     }
 
     private func reinitializeAudioEngine() {
-        logger.info("重新初始化音頻引擎")
 
         stopAudioEngine()
         audioBufferQueue.removeAll()
@@ -112,7 +108,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     }
 
     // MARK: - Public Methods
-    func startStreaming(text: String, voiceId: String = "moss_audio_058cb75f-6499-11f0-9307-da5fbc4b4ec1", speed: Float = 1.0, pitch: Int = 0, emotion: String = "neutral") {
+    func startStreaming(text: String, voiceId: String = "moss_audio_058cb75f-6499-11f0-9307-da5fbc4b4ec1", speed: Float = 1.0, pitch: Int = 0, emotion: String = "") {
         guard !isProcessing else {
             logger.warning("正在處理其他請求")
             return
@@ -345,7 +341,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
     // MARK: - 音頻處理
     private func processAudioChunk(_ audioData: Data) {
         DispatchQueue.main.async {
-            self.logger.debug("處理音頻 chunk，大小: \(audioData.count) bytes")
+            // self.logger.debug("處理音頻 chunk，大小: \(audioData.count) bytes")
 
             // 創建 PCM 緩衝區並加入隊列
             self.createAndQueuePCMBuffer(from: audioData)

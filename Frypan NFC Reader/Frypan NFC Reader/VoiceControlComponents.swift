@@ -183,7 +183,7 @@ struct SlideControlsView: View {
             HStack(spacing: 110) {
                 // 取消按鈕
                 Circle()
-                    .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(1) : Color.red.opacity(0.8))
+                    .fill(voiceManager.slideOffset < -50 ? Color.red.opacity(1) : Color.red.opacity(0.95))
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "xmark")
@@ -195,7 +195,7 @@ struct SlideControlsView: View {
                 
                 // 確認按鈕
                 Circle()
-                    .fill(voiceManager.slideOffset > 50 ? Color.green.opacity(1) : Color.green.opacity(0.8))
+                    .fill(voiceManager.slideOffset > 50 ? Color.green.opacity(1) : Color.green.opacity(0.95))
                     .frame(width: 80, height: 80)
                     .overlay(
                         Image(systemName: "checkmark")
@@ -225,7 +225,11 @@ struct SpeechRecognitionStatusView: View {
             VStack(spacing: 4) {
                 Text("識別中...")
                     .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.white.opacity(1))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.95))
+                    .cornerRadius(8)
                 
                 Text(speechRecognizer.recognizedText)
                     .font(.body)
@@ -233,7 +237,7 @@ struct SpeechRecognitionStatusView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
-                    .background(Color.blue.opacity(0.7))
+                    .background(Color.blue.opacity(0.95))
                     .cornerRadius(8)
             }
             .padding(.bottom, 8)

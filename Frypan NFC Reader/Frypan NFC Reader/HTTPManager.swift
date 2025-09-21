@@ -18,8 +18,10 @@ extension Notification.Name {
 // MARK: - HTTP Response Models
 struct HTTPChatResponse: Codable {
     let response: String
-    let voice_id: String?
+    let character_emotion: String?
     let character_id: Int?
+    let character_name: String?
+    let voice_id: String?
     let success: Bool
     let error: String?
 }
@@ -95,7 +97,18 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, @unchecked Senda
     @Published var receivedMessages: [String] = []
     @Published var isPlayingAudio = false
     @Published var geminiResponse: String = ""
-    @Published var connectionId: String = ""
+
+    // ServiceProtocol 要求嘅 connectionId，直接從 ConnectionManager 獲取
+    var connectionId: String {
+        get { connectionManager.getCurrentConnectionId() }
+        set {
+            Task { @MainActor in
+                connectionManager.currentConnectionId = newValue
+            }
+        }
+    }
+    // MARK: - Connection Manager
+    private let connectionManager = ConnectionManager.shared
     @Published var currentCharacter_id: Int = 9999 {
         didSet {
             logger.info("Character ID changed from \(oldValue) to \(self.currentCharacter_id)")
@@ -130,10 +143,7 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, @unchecked Senda
 
         super.init()
 
-        // 生成唯一連接 ID
-        let newConnectionId = UUID().uuidString.prefix(8).lowercased()
-        self.connectionId = newConnectionId
-        logger.info("設備連接 ID: \(newConnectionId)")
+        // 連接 ID 現在由 ConnectionManager 管理
 
         setupMiniMaxStreamManager()
         setupAudioBinding()
@@ -189,12 +199,10 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, @unchecked Senda
         let streamPlaying = miniMaxStreamManager?.isPlaying ?? false
         let newState = streamPlaying || audioPlaying
 
-        logger.info("更新播放狀態 - AudioManager: \(audioPlaying), MiniMax: \(streamPlaying), 新狀態: \(newState)")
 
         // 只有當狀態真正改變時先更新
         if self.isPlayingAudio != newState {
             self.isPlayingAudio = newState
-            logger.info("播放狀態已更改為: \(newState)")
         }
     }
     
@@ -210,7 +218,6 @@ class HTTPManager: NSObject, ObservableObject, ServiceProtocol, @unchecked Senda
 
         // 初始化 MiniMax 串流管理器
         self.miniMaxStreamManager = MiniMaxStreamManager()
-        logger.info("MiniMax 串流管理器已初始化")
 
         // 重新設置音頻綁定以包含 MiniMaxStreamManager
         setupAudioBinding()
@@ -311,7 +318,7 @@ extension HTTPManager {
                     self.speechRecognizer?.messages.append(loadingMessage)
                 }
                 // 如果冇 connection_id，先創建會話
-                if self.connectionId.isEmpty {
+                if connectionManager.getCurrentConnectionId().isEmpty {
                     let newConnectionId = try await createSession(characterId: character_idToUse)
                     self.setConnectionId(newConnectionId)
                 }
@@ -380,10 +387,16 @@ extension HTTPManager {
                     )
                     self.speechRecognizer?.messages.append(loadingMessage)
                 }
+                // 直接使用 ConnectionManager 嘅 connection_id
+                let currentConnectionId = connectionManager.getCurrentConnectionId()
+
                 // 如果冇 connection_id，先創建會話
-                if self.connectionId.isEmpty {
+                if currentConnectionId.isEmpty {
                     let newConnectionId = try await createSession(characterId: character_idToUse)
-                    self.setConnectionId(newConnectionId)
+                    // 直接設置到 ConnectionManager
+                    await MainActor.run {
+                        connectionManager.currentConnectionId = newConnectionId
+                    }
                 }
 
                 let request = HTTPChatRequest(
@@ -391,7 +404,7 @@ extension HTTPManager {
                     text: text,
                     character_id: character_idToUse,
                     streaming: true,
-                    connection_id: connectionId
+                    connection_id: connectionManager.getCurrentConnectionId()
                 )
 
                 let (data, _) = try await performHTTPCall(
@@ -456,17 +469,50 @@ extension HTTPManager {
     func clearHistory() {
         Task {
             do {
-                let (data, _) = try await performHTTPCall(
-                    endpoint: "/api/history/clear",
-                    method: "POST",
-                    body: Optional<String>.none
-                )
-                
-                if let response = try? JSONDecoder().decode(HTTPClearHistoryResponse.self, from: data) {
-                    logger.info("清除歷史記錄: \(response.message)")
+                // 獲取當前 connection_id 同 character_id
+                let connectionId = connectionManager.getCurrentConnectionId()
+                let characterId = currentCharacter_id
+
+                guard !connectionId.isEmpty else {
+                    logger.error("無法清除歷史記錄：冇有效嘅 connection_id")
+                    DispatchQueue.main.async {
+                        self.lastError = "無法清除歷史記錄：請先建立連接"
+                    }
+                    return
                 }
-                
+
+                logger.info("清除聊天歷史記錄 - connection_id: \(connectionId), character_id: \(characterId)")
+
+                // 構建 DELETE 請求 URL
+                let urlString = "http://145.79.12.177:10000/api/session/\(connectionId)?character_id=\(characterId)"
+                guard let url = URL(string: urlString) else {
+                    throw URLError(.badURL)
+                }
+
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.timeoutInterval = 30.0
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+
+                if httpResponse.statusCode == 200 {
+                    logger.info("✅ 聊天歷史記錄清除成功")
+                    DispatchQueue.main.async {
+                        self.lastError = nil
+                    }
+                } else {
+                    let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    logger.error("❌ 清除歷史記錄失敗: \(errorMessage)")
+                    throw NSError(domain: "ClearHistory", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "清除歷史記錄失敗"])
+                }
+
             } catch {
+                logger.error("❌ 清除歷史記錄時發生錯誤: \(error.localizedDescription)")
                 handleHTTPError(error)
             }
         }
@@ -524,22 +570,9 @@ extension HTTPManager {
         return validationResponse.data
     }
 
-    /// 創建會話 (使用 http_server, port 10000)
+    /// 創建會話 (使用 ConnectionManager)
     func createSession(characterId: Int) async throws -> String {
-        let sessionRequest = ["character_id": characterId]
-        let (data, _) = try await performHTTPCall(
-            endpoint: "/api/session/new",
-            method: "POST",
-            body: sessionRequest
-        )
-
-        let sessionResponse = try JSONDecoder().decode(HTTPSessionResponse.self, from: data)
-
-        guard sessionResponse.success else {
-            throw NSError(domain: "SessionCreation", code: 0, userInfo: [NSLocalizedDescriptionKey: sessionResponse.message ?? "Failed to create session"])
-        }
-
-        return sessionResponse.connection_id
+        return try await connectionManager.createSession(characterId: characterId)
     }
 
     /// 獲取角色名稱 (使用新架構 + fallback)
@@ -676,9 +709,11 @@ extension HTTPManager {
             // 優先從角色快取獲取 voice_id，其次使用 response 中的 voice_id，最後使用預設值
             let characterId = response.character_id ?? currentCharacter_id
             let voiceId = characterVoiceCache[characterId] ?? response.voice_id ?? "moss_audio_af916082-2e36-11f0-92db-0e8893cbb430"
+            // 使用服務器返回的 emotion，如果冇就用預設值 "" (none)
+            let emotion = response.character_emotion ?? ""
 
-            logger.info("使用 voice ID: \(voiceId) for character ID: \(characterId)")
-            triggerTextToSpeech(response.response, voiceId: voiceId)
+            logger.info("使用 voice ID: \(voiceId) for character ID: \(characterId), emotion: \(emotion)")
+            triggerTextToSpeech(response.response, voiceId: voiceId, emotion: emotion)
 
         } else {
             self.lastError = response.error ?? "Unknown error"
@@ -707,13 +742,14 @@ extension HTTPManager {
         }
     }
     
-    private func triggerTextToSpeech(_ text: String, voiceId: String) {
+    private func triggerTextToSpeech(_ text: String, voiceId: String, emotion: String = "") {
         guard !text.isEmpty, let miniMaxManager = miniMaxStreamManager else {
             logger.warning("MiniMax 串流管理器未初始化")
             return
         }
 
-        miniMaxManager.startStreaming(text: text, voiceId: voiceId)
+        logger.info("觸發語音合成 - text: \(text.prefix(50))..., voiceId: \(voiceId), emotion: \(emotion)")
+        miniMaxManager.startStreaming(text: text, voiceId: voiceId, emotion: emotion)
     }
 }
 
@@ -754,20 +790,18 @@ extension HTTPManager {
 
     @MainActor
     func setConnectionId(_ connectionId: String) {
-        self.connectionId = connectionId
-        logger.info("設置連接 ID: \(connectionId)")
+        // 直接設置到 ConnectionManager
+        connectionManager.currentConnectionId = connectionId
     }
 
     /// 重置連接 ID
     func resetConnectionId() {
-        DispatchQueue.main.async {
-            self.connectionId = ""
-            self.logger.info("重置連接 ID")
-        }
+        connectionManager.clearConnection()
+        logger.info("重置連接 ID")
     }
 
     func getConnectionId() -> String {
-        return connectionId
+        return connectionManager.getCurrentConnectionId()
     }
 
     func playPCMAudio(_ data: Data) {
