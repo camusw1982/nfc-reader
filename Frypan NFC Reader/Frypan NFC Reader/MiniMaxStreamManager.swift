@@ -226,7 +226,7 @@ class MiniMaxStreamManager: NSObject, ObservableObject {
         let requestBody: [String: Any] = [
             "stream": true,
             "text": text,
-            "model": "speech-02-hd",  // HD 模型支援串流
+            "model": "speech-2.5-hd-preview",  // HD 模型支援串流
             "voice_setting": [
                 "voice_id": voiceId,
                 "speed": speed,

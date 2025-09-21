@@ -78,7 +78,7 @@ struct NFCReaderView: View {
                             // 放這裡文字
                             Text("放呢度")
                                 .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white.opacity(0.3))
+                                .foregroundColor(.white.opacity(0.7))
                         }
                         
                     }
